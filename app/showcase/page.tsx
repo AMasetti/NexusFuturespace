@@ -9,8 +9,10 @@ import {
   HudPanel, HudBadge, HudLabel, HudSeparator, HudStatusDot,
   GaugeCircle, WaveformBar, HudProgressBar, LiveCounter, MiniBarChart,
   SonarPulse, ColorWheel, NodeGraph, TopographyMap, MicroscopyViewer,
+  CircuitSchematic,
   SystemStatsCard, WeatherCard, ConversationPanel, ResourceCounter,
   SuitViewer, VehicleStatusCard, UptimeCounter, CameraFeed, StatusBar, ActionBar,
+  SensorInventoryPanel, RoboticsPanel,
 } from "@/components/hud";
 
 import {
@@ -342,6 +344,94 @@ export default function ShowcasePage() {
               </div>
             </ComponentCard>
           </div>
+        </Section>
+
+        {/* ─── ROBOTICS / CIRCUIT ───────────────────────────────────────────── */}
+        <Section id="robotics" title="Robotics &amp; Circuit Components">
+          {/* CircuitSchematic standalone */}
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <ComponentCard name="CircuitSchematic — ESP32 + MPU-6050 + ADXL345 (I²C)">
+              <CircuitSchematic
+                boards={[
+                  { type: "esp32",   id: "mcu",   x: 210, y: 40  },
+                  { type: "mpu6050", id: "imu",   x: 30,  y: 70  },
+                  { type: "adxl345", id: "accel", x: 30,  y: 170 },
+                ]}
+                wires={[
+                  { from: { boardId: "imu",   pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" }, label: "3V3" },
+                  { from: { boardId: "imu",   pin: "GND" }, to: { boardId: "mcu", pin: "GND" }, label: "GND" },
+                  { from: { boardId: "imu",   pin: "SDA" }, to: { boardId: "mcu", pin: "D21" }, label: "SDA" },
+                  { from: { boardId: "imu",   pin: "SCL" }, to: { boardId: "mcu", pin: "D22" }, label: "SCL" },
+                  { from: { boardId: "accel", pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" } },
+                  { from: { boardId: "accel", pin: "GND" }, to: { boardId: "mcu", pin: "GND" } },
+                  { from: { boardId: "accel", pin: "SDA" }, to: { boardId: "mcu", pin: "D21" } },
+                  { from: { boardId: "accel", pin: "SCL" }, to: { boardId: "mcu", pin: "D22" } },
+                ]}
+                width={460}
+                height={270}
+                showPinLabels
+                showGrid
+              />
+            </ComponentCard>
+
+            <ComponentCard name="CircuitSchematic — Arduino Uno + MPU-6050 (I²C)">
+              <CircuitSchematic
+                boards={[
+                  { type: "arduino-uno", id: "uno",   x: 200, y: 60  },
+                  { type: "mpu6050",     id: "imu",   x: 30,  y: 100 },
+                ]}
+                wires={[
+                  { from: { boardId: "imu", pin: "VCC" }, to: { boardId: "uno", pin: "3V3" }, label: "3V3" },
+                  { from: { boardId: "imu", pin: "GND" }, to: { boardId: "uno", pin: "GND" }, label: "GND" },
+                  { from: { boardId: "imu", pin: "SDA" }, to: { boardId: "uno", pin: "A4"  }, label: "SDA" },
+                  { from: { boardId: "imu", pin: "SCL" }, to: { boardId: "uno", pin: "A5"  }, label: "SCL" },
+                  { from: { boardId: "imu", pin: "INT" }, to: { boardId: "uno", pin: "D2"  }, label: "INT" },
+                ]}
+                width={460}
+                height={270}
+                showPinLabels
+                showGrid
+              />
+            </ComponentCard>
+
+            <ComponentCard name="CircuitSchematic — ESP8266 + ADXL345">
+              <CircuitSchematic
+                boards={[
+                  { type: "esp8266", id: "esp", x: 200, y: 50 },
+                  { type: "adxl345", id: "ax",  x: 30,  y: 90 },
+                ]}
+                wires={[
+                  { from: { boardId: "ax", pin: "VCC" }, to: { boardId: "esp", pin: "3V3" }, label: "3V3" },
+                  { from: { boardId: "ax", pin: "GND" }, to: { boardId: "esp", pin: "GND" }, label: "GND" },
+                  { from: { boardId: "ax", pin: "SDA" }, to: { boardId: "esp", pin: "D2"  }, label: "SDA" },
+                  { from: { boardId: "ax", pin: "SCL" }, to: { boardId: "esp", pin: "D1"  }, label: "SCL" },
+                ]}
+                width={460}
+                height={230}
+                showPinLabels
+                showGrid
+              />
+            </ComponentCard>
+
+            <ComponentCard name="SensorInventoryPanel">
+              <SensorInventoryPanel
+                sensors={[
+                  { symbol: "He", id: "IMU",     name: "MPU-6050",      status: "online",  value: "9.81 m/s²", address: "0x68" },
+                  { symbol: "Ne", id: "POT",     name: "Servo Pot×3",   status: "online",  value: "127°",       address: "A0-2" },
+                  { symbol: "Cl", id: "ENCODER", name: "Joint Encoder", status: "warning", value: "—",          address: "A3"   },
+                  { symbol: "Kr", id: "CURRENT", name: "INA219",        status: "online",  value: "1.42 A",     address: "0x40" },
+                  { symbol: "Xe", id: "COMPASS", name: "HMC5883L",      status: "offline", value: "—",          address: "0x1E" },
+                ]}
+              />
+            </ComponentCard>
+          </div>
+
+          {/* Full RoboticsPanel — wide */}
+          <ComponentCard name="RoboticsPanel — Full HUMANOID-BOT Analysis View">
+            <div className="w-full overflow-x-auto">
+              <RoboticsPanel title="HUMANOID-BOT" unitLabel="PROTO-01 UNIT OVERVIEW" />
+            </div>
+          </ComponentCard>
         </Section>
       </div>
 

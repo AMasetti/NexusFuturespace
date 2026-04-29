@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/* ─── HUD Design Tokens ─────────────────────────────────────────────────── */
+:root {
+  --hud-bg:           #020B14;
+  --hud-surface:      #071828;
+  --hud-surface-2:    #0A1F30;
+  --hud-border:       #0D4A6B;
+  --hud-border-bright:#1A7BA0;
+  --hud-primary:      #00C8FF;
+  --hud-secondary:    #00FF9C;
+  --hud-danger:       #FF3E3E;
+  --hud-warning:      #FFB800;
+  --hud-glow:         rgba(0, 200, 255, 0.15);
+  --hud-glow-green:   rgba(0, 255, 156, 0.12);
+  --hud-text:         #7EC8E3;
+  --hud-text-bright:  #B8E8F8;
+  --hud-text-dim:     #2A5F7A;
+  --hud-scanline:     rgba(0, 200, 255, 0.03);
+}
+
+/* ─── Tailwind v4 Theme Extension ─────────────────────────────────────────── */
+@theme inline {
+  --color-hud-bg:            var(--hud-bg);
+  --color-hud-surface:       var(--hud-surface);
+  --color-hud-surface-2:     var(--hud-surface-2);
+  --color-hud-border:        var(--hud-border);
+  --color-hud-border-bright: var(--hud-border-bright);
+  --color-hud-primary:       var(--hud-primary);
+  --color-hud-secondary:     var(--hud-secondary);
+  --color-hud-danger:        var(--hud-danger);
+  --color-hud-warning:       var(--hud-warning);
+  --color-hud-text:          var(--hud-text);
+  --color-hud-text-bright:   var(--hud-text-bright);
+  --color-hud-text-dim:      var(--hud-text-dim);
+
+  --font-display: var(--font-rajdhani), 'Rajdhani', sans-serif;
+  --font-label:   var(--font-exo2), 'Exo 2', sans-serif;
+  --font-mono:    var(--font-jetbrains-mono), 'JetBrains Mono', monospace;
+
+  --animate-hud-pulse:   hud-pulse 2s ease-in-out infinite;
+  --animate-hud-scan:    hud-scan 8s linear infinite;
+  --animate-hud-flicker: hud-flicker 4s infinite;
+  --animate-sonar-ring:  sonar-ring 2s ease-out infinite;
+  --animate-data-stream: data-stream 3s linear infinite;
+}
+
+@keyframes hud-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+@keyframes hud-scan {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+@keyframes hud-flicker {
+  0%, 100% { opacity: 1; }
+  92%       { opacity: 1; }
+  93%       { opacity: 0.6; }
+  94%       { opacity: 1; }
+  96%       { opacity: 0.8; }
+  97%       { opacity: 1; }
+}
+
+@keyframes sonar-ring {
+  0%   { transform: scale(0.5); opacity: 0.8; }
+  100% { transform: scale(2);   opacity: 0; }
+}
+
+@keyframes data-stream {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+/* ─── Global Base ─────────────────────────────────────────────────────────── */
+body {
+  background: var(--hud-bg);
+  color: var(--hud-text);
+  font-family: 'Exo 2', sans-serif;
+}
+
+/* ─── HUD Utility Classes ─────────────────────────────────────────────────── */
+.hud-corners {
+  position: relative;
+}
+.hud-corners::before,
+.hud-corners::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--hud-primary);
+  border-style: solid;
+  pointer-events: none;
+  z-index: 1;
+}
+.hud-corners::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+}
+.hud-corners::after {
+  bottom: -1px;
+  right: -1px;
+  border-width: 0 2px 2px 0;
+}
+
+.hud-scanlines {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    var(--hud-scanline) 2px,
+    var(--hud-scanline) 4px
+  );
+}
+
+.hud-glow-text {
+  text-shadow: 0 0 10px var(--hud-primary), 0 0 20px var(--hud-primary);
+}
+
+.hud-glow-text-green {
+  text-shadow: 0 0 10px var(--hud-secondary), 0 0 20px var(--hud-secondary);
+}
+
+.hud-glow-box {
+  box-shadow: 0 0 20px var(--hud-glow), inset 0 0 20px rgba(0, 200, 255, 0.05);
+}
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--hud-surface); }
+::-webkit-scrollbar-thumb { background: var(--hud-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--hud-border-bright); }
+:focus-visible { outline: 2px solid var(--hud-primary); outline-offset: 2px; }

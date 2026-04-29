@@ -13,11 +13,13 @@ export { LiveCounter }    from "./data/LiveCounter";
 export { MiniBarChart }   from "./data/MiniBarChart";
 
 // Visualization
-export { SonarPulse }      from "./visualization/SonarPulse";
-export { ColorWheel }      from "./visualization/ColorWheel";
-export { NodeGraph }       from "./visualization/NodeGraph";
-export { TopographyMap }   from "./visualization/TopographyMap";
-export { MicroscopyViewer } from "./visualization/MicroscopyViewer";
+export { SonarPulse }        from "./visualization/SonarPulse";
+export { ColorWheel }        from "./visualization/ColorWheel";
+export { NodeGraph }         from "./visualization/NodeGraph";
+export { TopographyMap }     from "./visualization/TopographyMap";
+export { MicroscopyViewer }  from "./visualization/MicroscopyViewer";
+export { CircuitSchematic }  from "./visualization/CircuitSchematic";
+export type { PlacedBoard, Wire, BoardType, PinType } from "./visualization/CircuitSchematic";
 
 // Panels
 export { SystemStatsCard }  from "./panels/SystemStatsCard";
@@ -28,5 +30,8 @@ export { SuitViewer }       from "./panels/SuitViewer";
 export { VehicleStatusCard } from "./panels/VehicleStatusCard";
 export { UptimeCounter }    from "./panels/UptimeCounter";
 export { CameraFeed }       from "./panels/CameraFeed";
-export { StatusBar }        from "./panels/StatusBar";
-export { ActionBar }        from "./panels/ActionBar";
+export { StatusBar }            from "./panels/StatusBar";
+export { ActionBar }            from "./panels/ActionBar";
+export { SensorInventoryPanel } from "./panels/SensorInventoryPanel";
+export type { SensorEntry }     from "./panels/SensorInventoryPanel";
+export { RoboticsPanel }        from "./panels/RoboticsPanel";

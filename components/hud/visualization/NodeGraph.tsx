@@ -1,7 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
-
 interface NodeData {
   id: string;
   label: string;
@@ -24,9 +22,9 @@ interface NodeGraphProps {
 }
 
 const statusColor = {
-  active:   { stroke: "var(--hud-primary)",   fill: "rgba(0,200,255,0.1)" },
-  inactive: { stroke: "var(--hud-text-dim)",   fill: "rgba(42,95,122,0.1)" },
-  warning:  { stroke: "var(--hud-warning)",    fill: "rgba(255,184,0,0.1)" },
+  active: { stroke: "var(--hud-primary)", fill: "rgba(0,200,255,0.1)" },
+  inactive: { stroke: "var(--hud-text-dim)", fill: "rgba(42,95,122,0.1)" },
+  warning: { stroke: "var(--hud-warning)", fill: "rgba(255,184,0,0.1)" },
 };
 
 export function NodeGraph({ nodes, edges, width = 320, height = 220 }: NodeGraphProps) {
@@ -48,13 +46,13 @@ export function NodeGraph({ nodes, edges, width = 320, height = 220 }: NodeGraph
       {/* Edges */}
       {edges.map((edge, i) => {
         const from = nodeMap[edge.from];
-        const to   = nodeMap[edge.to];
+        const to = nodeMap[edge.to];
         if (!from || !to) return null;
         const fp = getPos(from);
         const tp = getPos(to);
         const mx = (fp.x + tp.x) / 2;
         const my = (fp.y + tp.y) / 2 - 20;
-        const d  = `M ${fp.x} ${fp.y} Q ${mx} ${my} ${tp.x} ${tp.y}`;
+        const d = `M ${fp.x} ${fp.y} Q ${mx} ${my} ${tp.x} ${tp.y}`;
 
         return (
           <g key={i}>
@@ -74,7 +72,13 @@ export function NodeGraph({ nodes, edges, width = 320, height = 220 }: NodeGraph
                 strokeDasharray="4 8"
                 strokeOpacity={0.7}
               >
-                <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite" />
+                <animate
+                  attributeName="stroke-dashoffset"
+                  from="0"
+                  to="-24"
+                  dur="1s"
+                  repeatCount="indefinite"
+                />
               </path>
             )}
           </g>
@@ -89,8 +93,12 @@ export function NodeGraph({ nodes, edges, width = 320, height = 220 }: NodeGraph
           <g key={node.id} transform={`translate(${x}, ${y})`}>
             {node.status === "active" && (
               <rect
-                x={-24} y={-14} width={48} height={28}
-                rx={3} ry={3}
+                x={-24}
+                y={-14}
+                width={48}
+                height={28}
+                rx={3}
+                ry={3}
                 fill={s.fill}
                 stroke={s.stroke}
                 strokeOpacity={0.3}
@@ -98,8 +106,12 @@ export function NodeGraph({ nodes, edges, width = 320, height = 220 }: NodeGraph
               />
             )}
             <rect
-              x={-22} y={-12} width={44} height={24}
-              rx={2} ry={2}
+              x={-22}
+              y={-12}
+              width={44}
+              height={24}
+              rx={2}
+              ry={2}
               fill="var(--hud-surface)"
               stroke={s.stroke}
               strokeWidth={1}

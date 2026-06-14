@@ -31,39 +31,35 @@ export function HudPanel({
   return (
     <div
       className={cn(
-        "relative rounded-sm border border-hud-border overflow-hidden",
-        variant === "default" && "bg-hud-surface/90",
+        "border-hud-border relative flex flex-col overflow-hidden rounded-sm border",
+        variant === "default" && "hud-panel-bg",
         variant === "ghost" && "bg-transparent",
-        variant === "elevated" && "bg-hud-surface/90 hud-glow-box",
+        variant === "elevated" && "hud-panel-bg hud-glow-box",
         glowing && "hud-glow-box",
         flickering && "animate-hud-flicker",
         cornerBrackets && "hud-corners",
         className
       )}
     >
-      {scanlines && (
-        <div className="absolute inset-0 pointer-events-none hud-scanlines z-10" />
-      )}
+      {scanlines && <div className="hud-scanlines pointer-events-none absolute inset-0 z-10" />}
 
       {(title || status) && (
-        <div className="flex items-center justify-between px-3 py-2 border-b border-hud-border/60">
+        <div className="border-hud-border/60 flex items-center justify-between border-b px-3 py-2">
           <div className="flex items-center gap-2">
             {status && <HudStatusDot status={status} size="sm" pulse />}
             {title && (
-              <span className="font-label text-xs uppercase tracking-widest text-hud-text-dim">
+              <span className="font-label text-hud-text-bright text-xs font-bold tracking-widest uppercase">
                 {title}
               </span>
             )}
             {subtitle && (
-              <span className="font-label text-xs text-hud-text-dim/60 ml-1">
-                · {subtitle}
-              </span>
+              <span className="font-label text-hud-text-dim/60 ml-1 text-xs">· {subtitle}</span>
             )}
           </div>
         </div>
       )}
 
-      <div className="relative z-0">{children}</div>
+      <div className="relative z-0 min-h-0 flex-1">{children}</div>
     </div>
   );
 }

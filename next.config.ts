@@ -1,7 +1,13 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  reactStrictMode: true,
+
+  // App uses local/data-URI images only — no remote image optimisation needed.
+  // Remove this if Vercel deployment with remote images is added later.
+  images: {
+    unoptimized: true,
+  },
 };
 
 export default nextConfig;

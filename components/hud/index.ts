@@ -1,37 +1,39 @@
 // Core
-export { HudPanel }      from "./core/HudPanel";
-export { HudBadge }      from "./core/HudBadge";
-export { HudLabel }      from "./core/HudLabel";
-export { HudSeparator }  from "./core/HudSeparator";
-export { HudStatusDot }  from "./core/HudStatusDot";
+export { HudPanel } from "./core/HudPanel";
+export { HudBadge } from "./core/HudBadge";
+export { HudLabel } from "./core/HudLabel";
+export { HudSeparator } from "./core/HudSeparator";
+export { HudStatusDot } from "./core/HudStatusDot";
 
 // Data
-export { GaugeCircle }    from "./data/GaugeCircle";
-export { WaveformBar }    from "./data/WaveformBar";
+export { GaugeCircle } from "./data/GaugeCircle";
+export { WaveformBar } from "./data/WaveformBar";
 export { HudProgressBar } from "./data/HudProgressBar";
-export { LiveCounter }    from "./data/LiveCounter";
-export { MiniBarChart }   from "./data/MiniBarChart";
+export { LiveCounter } from "./data/LiveCounter";
+export { MiniBarChart } from "./data/MiniBarChart";
 
 // Visualization
-export { SonarPulse }        from "./visualization/SonarPulse";
-export { ColorWheel }        from "./visualization/ColorWheel";
-export { NodeGraph }         from "./visualization/NodeGraph";
-export { TopographyMap }     from "./visualization/TopographyMap";
-export { MicroscopyViewer }  from "./visualization/MicroscopyViewer";
-export { CircuitSchematic }  from "./visualization/CircuitSchematic";
+export { SonarPulse } from "./visualization/SonarPulse";
+export { ColorWheel } from "./visualization/ColorWheel";
+export { NodeGraph } from "./visualization/NodeGraph";
+export { TopographyMap } from "./visualization/TopographyMap";
+export { MicroscopyViewer } from "./visualization/MicroscopyViewer";
+export { CircuitSchematic } from "./visualization/CircuitSchematic";
+export { MujocoViewer } from "./visualization/MujocoViewer";
 export type { PlacedBoard, Wire, BoardType, PinType } from "./visualization/CircuitSchematic";
 
 // Panels
-export { SystemStatsCard }  from "./panels/SystemStatsCard";
-export { WeatherCard }      from "./panels/WeatherCard";
+export { SystemStatsCard } from "./panels/SystemStatsCard";
+export { WeatherCard } from "./panels/WeatherCard";
 export { ConversationPanel } from "./panels/ConversationPanel";
-export { ResourceCounter }  from "./panels/ResourceCounter";
-export { SuitViewer }       from "./panels/SuitViewer";
+export { ResourceCounter } from "./panels/ResourceCounter";
+export { SuitViewer } from "./panels/SuitViewer";
 export { VehicleStatusCard } from "./panels/VehicleStatusCard";
-export { UptimeCounter }    from "./panels/UptimeCounter";
-export { CameraFeed }       from "./panels/CameraFeed";
-export { StatusBar }            from "./panels/StatusBar";
-export { ActionBar }            from "./panels/ActionBar";
+export { UptimeCounter } from "./panels/UptimeCounter";
+export { CameraFeed } from "./panels/CameraFeed";
+export { StatusBar } from "./panels/StatusBar";
+export { ActionBar } from "./panels/ActionBar";
 export { SensorInventoryPanel } from "./panels/SensorInventoryPanel";
-export type { SensorEntry }     from "./panels/SensorInventoryPanel";
-export { RoboticsPanel }        from "./panels/RoboticsPanel";
+export type { SensorEntry } from "./panels/SensorInventoryPanel";
+export { RoboticsPanel } from "./panels/RoboticsPanel";
+export { FloatingPanel } from "./panels/FloatingPanel";

@@ -16,9 +16,9 @@ interface UptimeCounterProps {
 
 function formatUptime(ms: number) {
   const totalSecs = Math.floor(ms / 1000);
-  const h  = Math.floor(totalSecs / 3600);
-  const m  = Math.floor((totalSecs % 3600) / 60);
-  const s  = totalSecs % 60;
+  const h = Math.floor(totalSecs / 3600);
+  const m = Math.floor((totalSecs % 3600) / 60);
+  const s = totalSecs % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
@@ -31,7 +31,7 @@ export function UptimeCounter({
   live = true,
 }: UptimeCounterProps) {
   const start = new Date(startTime).getTime();
-  const [elapsed, setElapsed] = useState(Date.now() - start);
+  const [elapsed, setElapsed] = useState(() => Date.now() - start);
   const [cmdCount, setCmdCount] = useState(commands);
 
   useEffect(() => {
@@ -45,22 +45,28 @@ export function UptimeCounter({
 
   return (
     <HudPanel title={label} status="online" cornerBrackets>
-      <div className="p-3 flex flex-col gap-3">
+      <div className="flex flex-col gap-3 p-3">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-2xl font-bold text-hud-primary hud-glow-text tabular-nums">
+          <span className="text-hud-primary hud-glow-text font-mono text-2xl font-bold tabular-nums">
             {formatUptime(elapsed)}
           </span>
-          <Maximize2 className="w-3.5 h-3.5 text-hud-text-dim" />
+          <Maximize2 className="text-hud-text-dim h-3.5 w-3.5" />
         </div>
 
-        <div className="grid grid-cols-2 gap-3 border-t border-hud-border/40 pt-2">
+        <div className="border-hud-border/40 grid grid-cols-2 gap-3 border-t pt-2">
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-sm font-bold text-hud-secondary">{sessions}</span>
-            <span className="font-label text-[9px] uppercase tracking-widest text-hud-text-dim">Sessions</span>
+            <span className="text-hud-secondary font-mono text-sm font-bold">{sessions}</span>
+            <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+              Sessions
+            </span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="font-mono text-sm font-bold text-hud-primary">{cmdCount.toLocaleString()}</span>
-            <span className="font-label text-[9px] uppercase tracking-widest text-hud-text-dim">Commands</span>
+            <span className="text-hud-primary font-mono text-sm font-bold">
+              {cmdCount.toLocaleString()}
+            </span>
+            <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+              Commands
+            </span>
           </div>
         </div>
 

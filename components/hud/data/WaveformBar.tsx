@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
 
 interface WaveformBarProps {
   data?: number[];
@@ -12,9 +11,9 @@ interface WaveformBarProps {
 }
 
 const colorMap = {
-  primary:   "var(--hud-primary)",
+  primary: "var(--hud-primary)",
   secondary: "var(--hud-secondary)",
-  warning:   "var(--hud-warning)",
+  warning: "var(--hud-warning)",
 };
 
 export function WaveformBar({
@@ -25,11 +24,17 @@ export function WaveformBar({
   height = 60,
 }: WaveformBarProps) {
   const bars = 40;
-  const [values, setValues] = useState<number[]>(
-    data ?? Array.from({ length: bars }, () => Math.random() * 80 + 10)
-  );
+  const [values, setValues] = useState<number[]>(data ?? Array.from({ length: bars }, () => 50));
   const rafRef = useRef<number>(0);
   const stroke = colorMap[color];
+
+  useEffect(() => {
+    if (!data) {
+      const newValues = Array.from({ length: bars }, () => Math.random() * 80 + 10);
+      const raf = requestAnimationFrame(() => setValues(newValues));
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [data, bars]);
 
   useEffect(() => {
     if (!animated) return;
@@ -45,7 +50,10 @@ export function WaveformBar({
     // Throttle to ~10fps for performance
     let last = 0;
     const throttled = (ts: number) => {
-      if (ts - last > 100) { last = ts; tick(); }
+      if (ts - last > 100) {
+        last = ts;
+        tick();
+      }
       rafRef.current = requestAnimationFrame(throttled);
     };
     rafRef.current = requestAnimationFrame(throttled);
@@ -58,7 +66,7 @@ export function WaveformBar({
   return (
     <div className="flex flex-col gap-1">
       {label && (
-        <span className="font-label text-[9px] uppercase tracking-widest text-hud-text-dim">
+        <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
           {label}
         </span>
       )}

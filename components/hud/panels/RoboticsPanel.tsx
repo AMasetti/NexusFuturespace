@@ -1,23 +1,39 @@
 "use client";
 
-import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis,
-  BarChart, Bar, ResponsiveContainer, Cell,
-} from "recharts";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, ResponsiveContainer } from "recharts";
 import { HudPanel } from "../core/HudPanel";
 import { SensorInventoryPanel, type SensorEntry } from "./SensorInventoryPanel";
 import { CircuitSchematic, type PlacedBoard, type Wire } from "../visualization/CircuitSchematic";
-import { HudProgressBar } from "../data/HudProgressBar";
-import { HudSeparator } from "../core/HudSeparator";
 
 // ─── Default mock data ──────────────────────────────────────────────────────────
 
 const DEFAULT_SENSORS: SensorEntry[] = [
-  { symbol: "He", id: "IMU",     name: "MPU-6050",      status: "online",  value: "9.81 m/s²",  address: "0x68" },
-  { symbol: "Ne", id: "POT",     name: "Servo Pot×3",   status: "online",  value: "127°",        address: "A0-2" },
-  { symbol: "Cl", id: "POT",     name: "Joint Encoder", status: "warning", value: "—",            address: "A3"   },
-  { symbol: "Kr", id: "CURRENT", name: "INA219",        status: "online",  value: "1.42 A",      address: "0x40" },
-  { symbol: "Xe", id: "COMPASS", name: "HMC5883L",      status: "offline", value: "—",            address: "0x1E" },
+  {
+    symbol: "He",
+    id: "IMU",
+    name: "MPU-6050",
+    status: "online",
+    value: "9.81 m/s²",
+    address: "0x68",
+  },
+  {
+    symbol: "Ne",
+    id: "POT",
+    name: "Servo Pot×3",
+    status: "online",
+    value: "127°",
+    address: "A0-2",
+  },
+  { symbol: "Cl", id: "POT", name: "Joint Encoder", status: "warning", value: "—", address: "A3" },
+  {
+    symbol: "Kr",
+    id: "CURRENT",
+    name: "INA219",
+    status: "online",
+    value: "1.42 A",
+    address: "0x40",
+  },
+  { symbol: "Xe", id: "COMPASS", name: "HMC5883L", status: "offline", value: "—", address: "0x1E" },
 ];
 
 const BALANCE_DATA = [
@@ -29,10 +45,10 @@ const BALANCE_DATA = [
 ];
 
 const SERVO_DATA = [
-  { joint: "HIP",  current: 1.42 },
+  { joint: "HIP", current: 1.42 },
   { joint: "KNEE", current: 0.98 },
   { joint: "ANKE", current: 0.61 },
-  { joint: "SHLDR",current: 1.15 },
+  { joint: "SHLDR", current: 1.15 },
   { joint: "ELBW", current: 0.73 },
 ];
 
@@ -56,7 +72,7 @@ function CodePanel() {
   return (
     <HudPanel title="Core Controller" subtitle="Schematic" cornerBrackets>
       <div className="p-3">
-        <pre className="font-mono text-[9px] text-hud-primary leading-relaxed whitespace-pre">
+        <pre className="text-hud-primary font-mono text-[9px] leading-relaxed whitespace-pre">
           {CODE_LINES.map((line, i) => (
             <div key={i} className={i === 3 || i === 10 ? "text-hud-secondary" : ""}>
               <span className="text-hud-text-dim/40 mr-2">{String(i + 1).padStart(2, "0")}</span>
@@ -98,14 +114,14 @@ function ServoCurrentPanel() {
   const max = Math.max(...SERVO_DATA.map((d) => d.current));
   return (
     <HudPanel title="Servo Operating Current" cornerBrackets>
-      <div className="p-3 flex flex-col gap-2">
-        <div className="flex items-end gap-1 h-[80px]">
+      <div className="flex flex-col gap-2 p-3">
+        <div className="flex h-[80px] items-end gap-1">
           {SERVO_DATA.map((d, i) => {
             const pct = d.current / max;
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
+              <div key={i} className="flex h-full flex-1 flex-col items-center justify-end gap-1">
                 <div
-                  className="w-full rounded-t-sm bg-hud-primary"
+                  className="bg-hud-primary w-full rounded-t-sm"
                   style={{
                     height: `${pct * 100}%`,
                     opacity: pct === 1 ? 1 : 0.55,
@@ -118,15 +134,17 @@ function ServoCurrentPanel() {
         </div>
         <div className="flex gap-1">
           {SERVO_DATA.map((d, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center">
-              <span className="font-mono text-[7px] text-hud-text-dim">{d.joint}</span>
-              <span className="font-mono text-[7px] text-hud-primary">{d.current}A</span>
+            <div key={i} className="flex flex-1 flex-col items-center">
+              <span className="text-hud-text-dim font-mono text-[7px]">{d.joint}</span>
+              <span className="text-hud-primary font-mono text-[7px]">{d.current}A</span>
             </div>
           ))}
         </div>
-        <div className="flex items-center gap-2 mt-1">
+        <div className="mt-1 flex items-center gap-2">
           {[0, 25, 50, 75, 100].map((v) => (
-            <span key={v} className="font-mono text-[7px] text-hud-text-dim flex-1 text-center">{v}</span>
+            <span key={v} className="text-hud-text-dim flex-1 text-center font-mono text-[7px]">
+              {v}
+            </span>
           ))}
         </div>
       </div>
@@ -147,46 +165,47 @@ interface RoboticsPanelProps {
 // ─── Default circuit: ESP32 + MPU6050 + ADXL345 ────────────────────────────────
 
 const DEFAULT_BOARDS: PlacedBoard[] = [
-  { type: "esp32",   id: "mcu",   x: 240, y: 50  },
-  { type: "mpu6050", id: "imu",   x: 60,  y: 80  },
-  { type: "adxl345", id: "accel", x: 60,  y: 170 },
+  { type: "esp32", id: "mcu", x: 240, y: 50 },
+  { type: "mpu6050", id: "imu", x: 60, y: 80 },
+  { type: "adxl345", id: "accel", x: 60, y: 170 },
 ];
 
 const DEFAULT_WIRES: Wire[] = [
   // MPU6050 → ESP32: I2C
-  { from: { boardId: "imu",   pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" }, label: "3V3"  },
-  { from: { boardId: "imu",   pin: "GND" }, to: { boardId: "mcu", pin: "GND" }, label: "GND"  },
-  { from: { boardId: "imu",   pin: "SDA" }, to: { boardId: "mcu", pin: "D21" }, label: "SDA"  },
-  { from: { boardId: "imu",   pin: "SCL" }, to: { boardId: "mcu", pin: "D22" }, label: "SCL"  },
+  { from: { boardId: "imu", pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" }, label: "3V3" },
+  { from: { boardId: "imu", pin: "GND" }, to: { boardId: "mcu", pin: "GND" }, label: "GND" },
+  { from: { boardId: "imu", pin: "SDA" }, to: { boardId: "mcu", pin: "D21" }, label: "SDA" },
+  { from: { boardId: "imu", pin: "SCL" }, to: { boardId: "mcu", pin: "D22" }, label: "SCL" },
   // ADXL345 → ESP32: I2C (shared bus)
-  { from: { boardId: "accel", pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" }                },
-  { from: { boardId: "accel", pin: "GND" }, to: { boardId: "mcu", pin: "GND" }                },
-  { from: { boardId: "accel", pin: "SDA" }, to: { boardId: "mcu", pin: "D21" }                },
-  { from: { boardId: "accel", pin: "SCL" }, to: { boardId: "mcu", pin: "D22" }                },
+  { from: { boardId: "accel", pin: "VCC" }, to: { boardId: "mcu", pin: "3V3" } },
+  { from: { boardId: "accel", pin: "GND" }, to: { boardId: "mcu", pin: "GND" } },
+  { from: { boardId: "accel", pin: "SDA" }, to: { boardId: "mcu", pin: "D21" } },
+  { from: { boardId: "accel", pin: "SCL" }, to: { boardId: "mcu", pin: "D22" } },
 ];
 
 // ─── Component ─────────────────────────────────────────────────────────────────
 
 export function RoboticsPanel({
   sensors = DEFAULT_SENSORS,
-  boards  = DEFAULT_BOARDS,
-  wires   = DEFAULT_WIRES,
-  title   = "HUMANOID-BOT",
+  boards = DEFAULT_BOARDS,
+  wires = DEFAULT_WIRES,
+  title = "HUMANOID-BOT",
   unitLabel = "PROTO-01 UNIT OVERVIEW",
 }: RoboticsPanelProps) {
   return (
     <div className="flex flex-col gap-2">
       {/* Header */}
-      <div className="flex items-center justify-between py-1 px-1">
-        <span className="font-display text-xl font-bold text-hud-primary hud-glow-text tracking-widest uppercase">
+      <div className="flex items-center justify-between px-1 py-1">
+        <span className="font-display text-hud-primary hud-glow-text text-xl font-bold tracking-widest uppercase">
           {title}
         </span>
-        <span className="font-label text-xs uppercase tracking-widest text-hud-text-dim">{unitLabel}</span>
+        <span className="font-label text-hud-text-dim text-xs tracking-widest uppercase">
+          {unitLabel}
+        </span>
       </div>
 
       {/* Main grid: left sensor list | center schematic | right code+charts */}
-      <div className="grid grid-cols-[200px_1fr_200px] gap-2 items-start">
-
+      <div className="grid grid-cols-[200px_1fr_200px] items-start gap-2">
         {/* ── Left: sensor inventory ─────────────────────────────────────── */}
         <SensorInventoryPanel sensors={sensors} title="Sensor Inventory" />
 

@@ -14,10 +14,10 @@ interface LiveCounterProps {
 }
 
 const colorMap = {
-  primary:   { text: "text-hud-primary",   glow: "hud-glow-text" },
+  primary: { text: "text-hud-primary", glow: "hud-glow-text" },
   secondary: { text: "text-hud-secondary", glow: "hud-glow-text-green" },
-  warning:   { text: "text-hud-warning",   glow: "" },
-  danger:    { text: "text-hud-danger",    glow: "" },
+  warning: { text: "text-hud-warning", glow: "" },
+  danger: { text: "text-hud-danger", glow: "" },
 };
 
 const sizeMap = {
@@ -41,14 +41,16 @@ export function LiveCounter({
   const { text, glow } = colorMap[color];
 
   useEffect(() => {
-    if (!animated) { setDisplay(value); return; }
+    if (!animated) {
+      const raf = requestAnimationFrame(() => setDisplay(value));
+      return () => cancelAnimationFrame(raf);
+    }
     let start: number | null = null;
     const duration = 1000;
-    const initial = 0;
     const step = (ts: number) => {
       if (!start) start = ts;
       const progress = Math.min((ts - start) / duration, 1);
-      setDisplay(Math.round(initial + (value - initial) * progress));
+      setDisplay(Math.round(value * progress));
       if (progress < 1) requestAnimationFrame(step);
     };
     const raf = requestAnimationFrame(step);
@@ -68,9 +70,9 @@ export function LiveCounter({
     <div className="flex flex-col items-center gap-1">
       <span className={cn("font-mono font-bold tabular-nums", sizeMap[size], text, glow)}>
         {display.toLocaleString()}
-        {unit && <span className="text-hud-text-dim text-[0.45em] ml-1">{unit}</span>}
+        {unit && <span className="text-hud-text-dim ml-1 text-[0.45em]">{unit}</span>}
       </span>
-      <span className="font-label text-[10px] uppercase tracking-widest text-hud-text-dim">
+      <span className="font-label text-hud-text-dim text-[10px] tracking-widest uppercase">
         {label}
       </span>
     </div>

@@ -13,10 +13,10 @@ interface HudProgressBarProps {
 }
 
 const colorMap = {
-  primary:   { fill: "bg-hud-primary",   glow: "shadow-[0_0_8px_var(--hud-primary)]" },
+  primary: { fill: "bg-hud-primary", glow: "shadow-[0_0_8px_var(--hud-primary)]" },
   secondary: { fill: "bg-hud-secondary", glow: "shadow-[0_0_8px_var(--hud-secondary)]" },
-  warning:   { fill: "bg-hud-warning",   glow: "shadow-[0_0_8px_var(--hud-warning)]" },
-  danger:    { fill: "bg-hud-danger",    glow: "shadow-[0_0_8px_var(--hud-danger)]" },
+  warning: { fill: "bg-hud-warning", glow: "shadow-[0_0_8px_var(--hud-warning)]" },
+  danger: { fill: "bg-hud-danger", glow: "shadow-[0_0_8px_var(--hud-danger)]" },
 };
 
 export function HudProgressBar({
@@ -31,24 +31,28 @@ export function HudProgressBar({
   const { fill, glow } = colorMap[color];
 
   useEffect(() => {
-    if (!animated) { setWidth(value); return; }
+    if (!animated) {
+      const raf = requestAnimationFrame(() => setWidth(value));
+      return () => cancelAnimationFrame(raf);
+    }
     const timeout = setTimeout(() => setWidth(value), 50);
     return () => clearTimeout(timeout);
   }, [value, animated]);
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex justify-between items-center">
-        <span className="font-label text-[10px] uppercase tracking-widest text-hud-text-dim">
+      <div className="flex items-center justify-between">
+        <span className="font-label text-hud-text-dim text-[10px] tracking-widest uppercase">
           {label}
         </span>
         {showValue && (
-          <span className="font-mono text-[10px] text-hud-text">
-            {value}{unit}
+          <span className="text-hud-text font-mono text-[10px]">
+            {value}
+            {unit}
           </span>
         )}
       </div>
-      <div className="h-1 w-full rounded-full bg-hud-border overflow-hidden">
+      <div className="bg-hud-border h-1 w-full overflow-hidden rounded-full">
         <div
           className={cn("h-full rounded-full", fill, glow)}
           style={{

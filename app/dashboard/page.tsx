@@ -1,33 +1,39 @@
 "use client";
 
-import {
-  Mic, Shield, Radio, Zap, Eye, Navigation, Map,
-  Activity, Cpu, Volume2, Settings, Lock, Wifi,
-} from "lucide-react";
+import { Mic, Shield, Radio, Zap, Eye, Navigation, Lock, Wifi } from "lucide-react";
 
 import {
-  StatusBar, SystemStatsCard, WeatherCard, CameraFeed, UptimeCounter,
-  ConversationPanel, ActionBar, SonarPulse, HudBadge, HudLabel,
+  StatusBar,
+  SystemStatsCard,
+  WeatherCard,
+  CameraFeed,
+  UptimeCounter,
+  ConversationPanel,
+  ActionBar,
+  SonarPulse,
+  HudBadge,
+  HudLabel,
 } from "@/components/hud";
 
 import { generateConversation } from "@/lib/hud-data";
 
 const messages = generateConversation();
+const UPTIME_START = new Date(Date.now() - 3 * 3600 * 1000 - 14 * 60 * 1000);
 
 const ACTIONS = [
-  { icon: <Mic className="w-4 h-4" />,        label: "Listen",   active: true  },
-  { icon: <Shield className="w-4 h-4" />,      label: "Shield"                  },
-  { icon: <Radio className="w-4 h-4" />,       label: "Comms"                   },
-  { icon: <Zap className="w-4 h-4" />,         label: "Power"                   },
-  { icon: <Eye className="w-4 h-4" />,         label: "Vision"                  },
-  { icon: <Navigation className="w-4 h-4" />,  label: "Nav"                     },
-  { icon: <Lock className="w-4 h-4" />,        label: "Lock"                    },
-  { icon: <Wifi className="w-4 h-4" />,        label: "Link"                    },
+  { icon: <Mic className="h-4 w-4" />, label: "Listen", active: true },
+  { icon: <Shield className="h-4 w-4" />, label: "Shield" },
+  { icon: <Radio className="h-4 w-4" />, label: "Comms" },
+  { icon: <Zap className="h-4 w-4" />, label: "Power" },
+  { icon: <Eye className="h-4 w-4" />, label: "Vision" },
+  { icon: <Navigation className="h-4 w-4" />, label: "Nav" },
+  { icon: <Lock className="h-4 w-4" />, label: "Lock" },
+  { icon: <Wifi className="h-4 w-4" />, label: "Link" },
 ];
 
 export default function DashboardPage() {
   return (
-    <div className="h-screen flex flex-col bg-hud-bg overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden">
       {/* Status bar */}
       <StatusBar
         systemName="J.A.R.V.I.S"
@@ -37,10 +43,9 @@ export default function DashboardPage() {
       />
 
       {/* Main grid */}
-      <div className="flex-1 grid grid-cols-[260px_1fr_280px] gap-2 p-2 overflow-hidden">
-
+      <div className="grid flex-1 grid-cols-[260px_1fr_280px] gap-2 overflow-hidden p-2">
         {/* ── LEFT COLUMN ─────────────────────────────────────────────────── */}
-        <div className="flex flex-col gap-2 overflow-y-auto min-h-0">
+        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           <SystemStatsCard
             cpu={63}
             ram={{ used: 7.2, total: 16 }}
@@ -58,7 +63,7 @@ export default function DashboardPage() {
           />
           <CameraFeed active label="CAM-01" resolution="1920×1080" fps={30} />
           <UptimeCounter
-            startTime={new Date(Date.now() - 3 * 3600 * 1000 - 14 * 60 * 1000)}
+            startTime={UPTIME_START}
             sessions={3}
             commands={127}
             systemLoad={42}
@@ -69,34 +74,29 @@ export default function DashboardPage() {
         {/* ── CENTER COLUMN ───────────────────────────────────────────────── */}
         <div className="flex flex-col items-center justify-between gap-2 overflow-hidden">
           {/* Sonar pulse */}
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full">
+          <div className="flex w-full flex-1 flex-col items-center justify-center gap-4">
             {/* Decorative top lines */}
-            <div className="w-full flex items-center gap-2 px-4">
-              <div className="flex-1 h-px bg-hud-border/40" />
+            <div className="flex w-full items-center gap-2 px-4">
+              <div className="bg-hud-border/40 h-px flex-1" />
               <HudLabel text="Neural Interface" variant="dim" size="xs" />
-              <div className="flex-1 h-px bg-hud-border/40" />
+              <div className="bg-hud-border/40 h-px flex-1" />
             </div>
 
-            <SonarPulse
-              active
-              color="primary"
-              size="lg"
-              rings={5}
-            />
+            <SonarPulse active color="primary" size="lg" rings={5} />
 
             {/* System name */}
             <div className="flex flex-col items-center gap-2">
-              <h2 className="font-display text-4xl font-bold text-hud-primary hud-glow-text tracking-[0.3em] uppercase">
+              <h2 className="font-display text-hud-primary hud-glow-text text-4xl font-bold tracking-[0.3em] uppercase">
                 J.A.R.V.I.S
               </h2>
               <HudBadge variant="online" label="Listening for wake word..." pulse size="sm" />
             </div>
 
             {/* Decorative bottom lines */}
-            <div className="w-full flex items-center gap-2 px-4">
-              <div className="flex-1 h-px bg-hud-border/40" />
+            <div className="flex w-full items-center gap-2 px-4">
+              <div className="bg-hud-border/40 h-px flex-1" />
               <HudLabel text="v4.2.1 · All systems nominal" variant="dim" size="xs" mono />
-              <div className="flex-1 h-px bg-hud-border/40" />
+              <div className="bg-hud-border/40 h-px flex-1" />
             </div>
           </div>
 
@@ -107,11 +107,8 @@ export default function DashboardPage() {
         </div>
 
         {/* ── RIGHT COLUMN ────────────────────────────────────────────────── */}
-        <div className="flex flex-col overflow-hidden min-h-0">
-          <ConversationPanel
-            messages={messages}
-            systemName="J.A.R.V.I.S"
-          />
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <ConversationPanel messages={messages} systemName="J.A.R.V.I.S" />
         </div>
       </div>
     </div>

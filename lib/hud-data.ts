@@ -1,3 +1,49 @@
+// ─── Robotics page static data ────────────────────────────────────────────────
+
+export interface JointEntry {
+  label: string;
+  value: number;
+  color: "primary" | "secondary" | "warning";
+}
+
+export const ROBOTICS_JOINTS: JointEntry[] = [
+  { label: "Shoulder", value: 78, color: "primary" },
+  { label: "Elbow", value: 45, color: "primary" },
+  { label: "Wrist", value: 62, color: "secondary" },
+  { label: "Hip", value: 91, color: "secondary" },
+  { label: "Knee", value: 33, color: "warning" },
+  { label: "Ankle", value: 55, color: "primary" },
+];
+
+export interface TorqueEntry {
+  label: string;
+  value: number;
+}
+
+export const ROBOTICS_TORQUE: TorqueEntry[] = [
+  { label: "SHLDR", value: 78 },
+  { label: "ELBW", value: 45 },
+  { label: "WRST", value: 62 },
+  { label: "HIP", value: 91 },
+  { label: "KNEE", value: 33 },
+  { label: "ANKL", value: 55 },
+];
+
+export interface TaskEntry {
+  label: string;
+  value: number;
+  color: "primary" | "secondary" | "warning";
+}
+
+export const ROBOTICS_TASKS: TaskEntry[] = [
+  { label: "Pathfinding", value: 100, color: "secondary" },
+  { label: "Obstacle Map", value: 87, color: "secondary" },
+  { label: "Grasp Plan", value: 54, color: "primary" },
+  { label: "Sync Uplink", value: 23, color: "warning" },
+];
+
+// ─── Generic generators ───────────────────────────────────────────────────────
+
 export function generateWaveformData(length = 40): number[] {
   return Array.from({ length }, () => Math.random() * 80 + 10);
 }
@@ -41,7 +87,8 @@ export function generateConversation(): Message[] {
     },
     {
       role: "assistant",
-      content: "Threat level: LOW. No hostile signatures detected within 50km radius. Perimeter shields at full capacity.",
+      content:
+        "Threat level: LOW. No hostile signatures detected within 50km radius. Perimeter shields at full capacity.",
       timestamp: "09:01:07",
     },
   ];
@@ -103,24 +150,22 @@ export function generateNodes(): { nodes: NodeData[]; edges: EdgeData[] } {
   return {
     nodes: [
       { id: "core", label: "CORE", x: 50, y: 50, status: "active" },
-      { id: "nav",  label: "NAV",  x: 20, y: 20, status: "active" },
+      { id: "nav", label: "NAV", x: 20, y: 20, status: "active" },
       { id: "comm", label: "COMM", x: 80, y: 20, status: "active" },
       { id: "sens", label: "SENS", x: 20, y: 80, status: "warning" },
-      { id: "pwr",  label: "PWR",  x: 80, y: 80, status: "inactive" },
+      { id: "pwr", label: "PWR", x: 80, y: 80, status: "inactive" },
     ],
     edges: [
-      { from: "core", to: "nav",  animated: true },
+      { from: "core", to: "nav", animated: true },
       { from: "core", to: "comm", animated: true },
       { from: "core", to: "sens", animated: false },
-      { from: "core", to: "pwr",  animated: false },
+      { from: "core", to: "pwr", animated: false },
     ],
   };
 }
 
 export function generateTopography(size = 8): number[][] {
-  return Array.from({ length: size }, () =>
-    Array.from({ length: size }, () => Math.random())
-  );
+  return Array.from({ length: size }, () => Array.from({ length: size }, () => Math.random()));
 }
 
 export function generateMiniBarData() {
@@ -138,9 +183,9 @@ export function generateMiniBarData() {
 export function generateColorWheelSegments() {
   return [
     { label: "Navigation", value: 30, color: "#00C8FF" },
-    { label: "Power",      value: 25, color: "#00FF9C" },
-    { label: "Comms",      value: 20, color: "#FFB800" },
-    { label: "Sensors",    value: 15, color: "#FF3E3E" },
-    { label: "Life Sup.",  value: 10, color: "#7EC8E3" },
+    { label: "Power", value: 25, color: "#00FF9C" },
+    { label: "Comms", value: 20, color: "#FFB800" },
+    { label: "Sensors", value: 15, color: "#FF3E3E" },
+    { label: "Life Sup.", value: 10, color: "#7EC8E3" },
   ];
 }

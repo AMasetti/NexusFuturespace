@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useId, useState } from "react";
 
 interface GaugeCircleProps {
   value: number;
@@ -14,16 +13,16 @@ interface GaugeCircleProps {
 }
 
 const colorMap = {
-  primary:   { stroke: "var(--hud-primary)",   glow: "var(--hud-primary)" },
-  secondary: { stroke: "var(--hud-secondary)",  glow: "var(--hud-secondary)" },
-  warning:   { stroke: "var(--hud-warning)",    glow: "var(--hud-warning)" },
-  danger:    { stroke: "var(--hud-danger)",     glow: "var(--hud-danger)" },
+  primary: { stroke: "var(--hud-primary)", glow: "var(--hud-primary)" },
+  secondary: { stroke: "var(--hud-secondary)", glow: "var(--hud-secondary)" },
+  warning: { stroke: "var(--hud-warning)", glow: "var(--hud-warning)" },
+  danger: { stroke: "var(--hud-danger)", glow: "var(--hud-danger)" },
 };
 
 const sizeMap = {
-  sm: { px: 80,  strokeW: 5,  fontSize: 14, labelSize: 8 },
-  md: { px: 120, strokeW: 7,  fontSize: 22, labelSize: 10 },
-  lg: { px: 160, strokeW: 9,  fontSize: 32, labelSize: 12 },
+  sm: { px: 80, strokeW: 5, fontSize: 14, labelSize: 8 },
+  md: { px: 120, strokeW: 7, fontSize: 22, labelSize: 10 },
+  lg: { px: 160, strokeW: 9, fontSize: 32, labelSize: 12 },
 };
 
 export function GaugeCircle({
@@ -35,8 +34,11 @@ export function GaugeCircle({
   color = "primary",
   animated = false,
 }: GaugeCircleProps) {
+  const uid = useId();
+  const filterId = `glow-${color}-${uid.replace(/:/g, "")}`;
+
   const { px, strokeW, fontSize, labelSize } = sizeMap[size];
-  const { stroke, glow } = colorMap[color];
+  const { stroke } = colorMap[color];
 
   const radius = (px - strokeW * 2) / 2;
   const circumference = 2 * Math.PI * radius;
@@ -44,14 +46,16 @@ export function GaugeCircle({
   const [displayValue, setDisplayValue] = useState(animated ? 0 : value);
 
   useEffect(() => {
-    if (!animated) { setDisplayValue(value); return; }
+    if (!animated) {
+      const raf = requestAnimationFrame(() => setDisplayValue(value));
+      return () => cancelAnimationFrame(raf);
+    }
     let start: number | null = null;
-    const initial = 0;
     const duration = 1200;
     const step = (ts: number) => {
       if (!start) start = ts;
       const progress = Math.min((ts - start) / duration, 1);
-      setDisplayValue(Math.round(initial + (value - initial) * progress));
+      setDisplayValue(Math.round(value * progress));
       if (progress < 1) requestAnimationFrame(step);
     };
     const raf = requestAnimationFrame(step);
@@ -69,7 +73,7 @@ export function GaugeCircle({
     <div className="flex flex-col items-center gap-1" style={{ width: px }}>
       <svg width={px} height={px} className="overflow-visible">
         <defs>
-          <filter id={`glow-${color}`}>
+          <filter id={filterId}>
             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
             <feMerge>
               <feMergeNode in="coloredBlur" />
@@ -87,10 +91,10 @@ export function GaugeCircle({
           return (
             <line
               key={i}
-              x1={cx + r1 * Math.cos(rad)}
-              y1={cy + r1 * Math.sin(rad)}
-              x2={cx + r2 * Math.cos(rad)}
-              y2={cy + r2 * Math.sin(rad)}
+              x1={parseFloat((cx + r1 * Math.cos(rad)).toFixed(4))}
+              y1={parseFloat((cy + r1 * Math.sin(rad)).toFixed(4))}
+              x2={parseFloat((cx + r2 * Math.cos(rad)).toFixed(4))}
+              y2={parseFloat((cy + r2 * Math.sin(rad)).toFixed(4))}
               stroke="var(--hud-border)"
               strokeWidth={1}
             />
@@ -99,7 +103,9 @@ export function GaugeCircle({
 
         {/* Track */}
         <circle
-          cx={cx} cy={cy} r={radius}
+          cx={cx}
+          cy={cy}
+          r={radius}
           fill="none"
           stroke="var(--hud-border)"
           strokeWidth={strokeW}
@@ -107,7 +113,9 @@ export function GaugeCircle({
 
         {/* Fill */}
         <circle
-          cx={cx} cy={cy} r={radius}
+          cx={cx}
+          cy={cy}
+          r={radius}
           fill="none"
           stroke={stroke}
           strokeWidth={strokeW}
@@ -115,13 +123,14 @@ export function GaugeCircle({
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           transform={`rotate(-90 ${cx} ${cy})`}
-          filter={`url(#glow-${color})`}
+          filter={`url(#${filterId})`}
           style={{ transition: animated ? "stroke-dashoffset 0.1s linear" : "none" }}
         />
 
         {/* Value */}
         <text
-          x={cx} y={cy - 4}
+          x={cx}
+          y={cy - 4}
           textAnchor="middle"
           fill={stroke}
           fontSize={fontSize}
@@ -129,12 +138,15 @@ export function GaugeCircle({
           fontWeight="700"
         >
           {displayValue}
-          <tspan fontSize={fontSize * 0.45} fill="var(--hud-text-dim)">{unit}</tspan>
+          <tspan fontSize={fontSize * 0.45} fill="var(--hud-text-dim)">
+            {unit}
+          </tspan>
         </text>
 
         {/* Label */}
         <text
-          x={cx} y={cy + labelSize + 4}
+          x={cx}
+          y={cy + labelSize + 4}
           textAnchor="middle"
           fill="var(--hud-text-dim)"
           fontSize={labelSize}

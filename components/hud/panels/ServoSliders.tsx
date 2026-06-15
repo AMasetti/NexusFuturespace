@@ -3,7 +3,6 @@
 import { HudPanel } from "../core/HudPanel";
 import { HudSeparator } from "../core/HudSeparator";
 
-// Actuated joints exposed for manual control (radians internally, degrees in UI)
 export interface JointAngles {
   "Servo-Hip-L": number;
   "Servo-Hip-R": number;
@@ -15,10 +14,19 @@ export interface JointAngles {
   "Servo-Ankle-R": number;
   "Servo-Showlder-L-Front-Back": number;
   "Servo-Showlder-R-Front-Back": number;
+  "Servo-Showlder-L-Inward-Outward": number;
+  "Servo-Showlder-R-Inward-Outward": number;
   "Servo-Forearm-L": number;
   "Servo-Forearm-R": number;
 }
 
+const D = Math.PI / 180;
+
+// All joints: display 0–180°, halt = 90° center, URDF rad = (displayDeg − 90) × D.
+// Shoulder lat URDF zero is arms-horizontal (T-pose mesh neutral).
+// Arms-down (halt) = −π/2 for L (axis +Z) and +π/2 for R (axis −Z).
+// So their DEFAULT is set to those values so display reads 90° at halt.
+const H = Math.PI / 2;
 export const DEFAULT_JOINT_ANGLES: JointAngles = {
   "Servo-Hip-L": 0,
   "Servo-Hip-R": 0,
@@ -30,39 +38,78 @@ export const DEFAULT_JOINT_ANGLES: JointAngles = {
   "Servo-Ankle-R": 0,
   "Servo-Showlder-L-Front-Back": 0,
   "Servo-Showlder-R-Front-Back": 0,
+  "Servo-Showlder-L-Inward-Outward": -H, // arms-down on +Z axis = −π/2
+  "Servo-Showlder-R-Inward-Outward": -H, // arms-down on −Z axis = also −π/2 (same physical rotation)
   "Servo-Forearm-L": 0,
   "Servo-Forearm-R": 0,
 };
 
-const JOINT_GROUPS: {
+// haltRad: URDF value at halt (default 0; shoulder lat arms-down ≠ URDF zero)
+// scale:   sign mapping display Δdeg → URDF Δrad (+1 for axis+Z, −1 for axis−Z)
+type JointDef = {
+  key: keyof JointAngles;
   label: string;
-  joints: { key: keyof JointAngles; label: string; min: number; max: number }[];
-}[] = [
+  sublabel: string;
+  haltRad?: number;
+  scale?: number;
+};
+
+const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = [
   {
-    label: "LEGS",
+    label: "LEFT LEG",
+    sublabel: "ch 12–15",
     joints: [
-      { key: "Servo-Hip-L", label: "Hip L", min: -90, max: 90 },
-      { key: "Servo-Hip-R", label: "Hip R", min: -90, max: 90 },
-      { key: "Servo-Knee-L-Top", label: "Knee L Top", min: -120, max: 0 },
-      { key: "Servo-Knee-L-Bottom", label: "Knee L Bot", min: -120, max: 0 },
-      { key: "Servo-Knee-R-Top", label: "Knee R Top", min: -120, max: 0 },
-      { key: "Servo-Knee-R-Bottom", label: "Knee R Bot", min: -120, max: 0 },
-      { key: "Servo-Ankle-L", label: "Ankle L", min: -45, max: 45 },
-      { key: "Servo-Ankle-R", label: "Ankle R", min: -45, max: 45 },
+      { key: "Servo-Hip-L", label: "Hip Roll L", sublabel: "ch 12 · hip_roll" },
+      { key: "Servo-Knee-L-Top", label: "Hip Pitch L", sublabel: "ch 13 · hip_pitch" },
+      { key: "Servo-Knee-L-Bottom", label: "Knee Bend L", sublabel: "ch 14 · knee" },
+      { key: "Servo-Ankle-L", label: "Ankle Roll L", sublabel: "ch 15 · ankle_roll" },
+    ],
+  },
+  {
+    label: "RIGHT LEG",
+    sublabel: "ch 0–3",
+    joints: [
+      { key: "Servo-Hip-R", label: "Hip Roll R", sublabel: "ch 3  · hip_roll" },
+      { key: "Servo-Knee-R-Top", label: "Hip Pitch R", sublabel: "ch 2  · hip_pitch" },
+      { key: "Servo-Knee-R-Bottom", label: "Knee Bend R", sublabel: "ch 1  · knee" },
+      { key: "Servo-Ankle-R", label: "Ankle Roll R", sublabel: "ch 0  · ankle_roll" },
     ],
   },
   {
     label: "ARMS",
+    sublabel: "ch 4–9",
     joints: [
-      { key: "Servo-Showlder-L-Front-Back", label: "Shoulder L", min: -90, max: 90 },
-      { key: "Servo-Showlder-R-Front-Back", label: "Shoulder R", min: -90, max: 90 },
-      { key: "Servo-Forearm-L", label: "Forearm L", min: -120, max: 0 },
-      { key: "Servo-Forearm-R", label: "Forearm R", min: -120, max: 0 },
+      {
+        key: "Servo-Showlder-L-Front-Back",
+        label: "Shoulder FB L",
+        sublabel: "ch 7 · shoulder_fb",
+      },
+      {
+        key: "Servo-Showlder-R-Front-Back",
+        label: "Shoulder FB R",
+        sublabel: "ch 4 · shoulder_fb",
+      },
+      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (L, axis+Z) / +π/2 (R, axis−Z).
+      // scale=+1 for L (moving slider right raises arm), scale=−1 for R (axis flipped).
+      {
+        key: "Servo-Showlder-L-Inward-Outward",
+        label: "Shoulder Lat L",
+        sublabel: "ch 8 · shoulder_lat",
+        haltRad: -H,
+        scale: +1,
+      },
+      {
+        key: "Servo-Showlder-R-Inward-Outward",
+        label: "Shoulder Lat R",
+        sublabel: "ch 5 · shoulder_lat",
+        haltRad: -H,
+        scale: -1,
+      },
+      { key: "Servo-Forearm-L", label: "Forearm Lat L", sublabel: "ch 9 · forearm_lat" },
+      { key: "Servo-Forearm-R", label: "Forearm Lat R", sublabel: "ch 6 · forearm_lat" },
     ],
   },
 ];
-
-const DEG_TO_RAD = Math.PI / 180;
 
 interface ServoSlidersProps {
   angles: JointAngles;
@@ -71,55 +118,58 @@ interface ServoSlidersProps {
 
 function JointSlider({
   label,
-  min,
-  max,
+  sublabel,
   valueDeg,
   onChange,
 }: {
   label: string;
-  min: number;
-  max: number;
-  valueDeg: number;
+  sublabel: string;
+  valueDeg: number; // 0–180, halt = 90
   onChange: (deg: number) => void;
 }) {
-  const pct = ((valueDeg - min) / (max - min)) * 100;
+  const pct = (valueDeg / 180) * 100;
 
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between">
-        <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
-          {label}
-        </span>
-        <span className="text-hud-primary font-mono text-[10px] tabular-nums">
-          {valueDeg > 0 ? "+" : ""}
-          {valueDeg}°
-        </span>
+        <div className="flex flex-col gap-0">
+          <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+            {label}
+          </span>
+          <span
+            className="font-mono text-[7px] tracking-wide"
+            style={{ color: "rgba(0,200,255,0.28)" }}
+          >
+            {sublabel}
+          </span>
+        </div>
+        <span className="text-hud-primary font-mono text-[10px] tabular-nums">{valueDeg}°</span>
       </div>
       <div className="group relative flex h-4 items-center">
-        {/* Track */}
         <div className="bg-hud-border/40 relative h-0.5 w-full overflow-visible rounded-full">
-          {/* Zero marker */}
+          {/* Halt marker at 90° (50%) */}
           <div
-            className="bg-hud-border absolute top-1/2 h-2 w-px -translate-y-1/2"
-            style={{ left: `${((0 - min) / (max - min)) * 100}%` }}
+            className="bg-hud-primary/50 absolute top-1/2 h-2 w-px -translate-y-1/2"
+            style={{ left: "50%" }}
           />
-          {/* Fill */}
+          {/* Fill from halt to current */}
           <div
             className="bg-hud-primary/60 absolute top-0 h-full rounded-full transition-none"
             style={{
-              left: `${Math.min(pct, ((0 - min) / (max - min)) * 100)}%`,
-              width: `${Math.abs(pct - ((0 - min) / (max - min)) * 100)}%`,
+              left: `${Math.min(pct, 50)}%`,
+              width: `${Math.abs(pct - 50)}%`,
             }}
           />
         </div>
-        {/* Thumb (rendered via range input — invisible but functional) */}
+        {/* Invisible range — double-click resets to halt */}
         <input
           type="range"
-          min={min}
-          max={max}
+          min={0}
+          max={180}
           step={1}
           value={valueDeg}
           onChange={(e) => onChange(Number(e.target.value))}
+          onDoubleClick={() => onChange(90)}
           className="absolute inset-0 w-full cursor-pointer opacity-0"
         />
         {/* Custom thumb */}
@@ -133,9 +183,13 @@ function JointSlider({
 }
 
 export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
-  const setJoint = (key: keyof JointAngles, deg: number) => {
-    onChange({ ...angles, [key]: deg });
+  const setJoint = (key: keyof JointAngles, displayDeg: number, haltRad = 0, scale = 1) => {
+    // urdfRad = haltRad + (displayDeg − 90) × D × scale
+    onChange({ ...angles, [key]: haltRad + (displayDeg - 90) * D * scale });
   };
+
+  const toDisplay = (urdfRad: number, haltRad = 0, scale = 1) =>
+    Math.max(0, Math.min(180, Math.round(90 + ((urdfRad - haltRad) / D) * scale)));
 
   const resetAll = () => onChange({ ...DEFAULT_JOINT_ANGLES });
 
@@ -143,9 +197,14 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
     <HudPanel title="Servo Control" status="online" cornerBrackets className="h-full">
       <div className="flex h-full flex-col gap-3 overflow-auto p-3">
         <div className="flex items-center justify-between">
-          <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
-            Manual Override
-          </span>
+          <div className="flex flex-col gap-0">
+            <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+              Manual Override
+            </span>
+            <span className="font-mono text-[7px]" style={{ color: "rgba(0,200,255,0.30)" }}>
+              dbl-click slider → halt
+            </span>
+          </div>
           <button
             onClick={resetAll}
             className="border-hud-border/60 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
@@ -161,16 +220,21 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
               <span className="font-label text-hud-primary text-[8px] tracking-[0.2em] uppercase">
                 {group.label}
               </span>
+              <span
+                className="font-mono text-[7px] tracking-wide"
+                style={{ color: "rgba(0,200,255,0.35)" }}
+              >
+                {group.sublabel}
+              </span>
               <div className="bg-hud-border/40 h-px flex-1" />
             </div>
-            {group.joints.map(({ key, label, min, max }) => (
+            {group.joints.map(({ key, label, sublabel, haltRad, scale }) => (
               <JointSlider
                 key={key}
                 label={label}
-                min={min}
-                max={max}
-                valueDeg={Math.round(angles[key] / DEG_TO_RAD)}
-                onChange={(deg) => setJoint(key, deg * DEG_TO_RAD)}
+                sublabel={sublabel}
+                valueDeg={toDisplay(angles[key], haltRad, scale)}
+                onChange={(deg) => setJoint(key, deg, haltRad, scale)}
               />
             ))}
             {gi < JOINT_GROUPS.length - 1 && <HudSeparator />}

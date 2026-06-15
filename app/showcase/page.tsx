@@ -572,7 +572,7 @@ export default function ShowcasePage() {
 
           {/* MuJoCo / Optimus 3D viewer */}
           <ComponentCard name="MujocoViewer — Optimus Full · 3D Physics Visualization">
-            <MujocoViewer className="w-full overflow-hidden rounded-sm" height={520} />
+            <MujocoViewer className="w-full overflow-hidden rounded-sm" />
           </ComponentCard>
         </Section>
       </div>

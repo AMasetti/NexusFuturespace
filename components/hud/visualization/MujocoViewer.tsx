@@ -1,12 +1,13 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import URDFLoader, { type URDFRobot as URDFRobotType } from "urdf-loader";
 import { STLLoader, OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { JointAngles } from "@/components/hud/panels/ServoSliders";
+import type { CameraState } from "@/lib/persist";
 
 const PI = Math.PI;
 const H = PI / 2;
@@ -30,13 +31,16 @@ function pickEdgeMat(path: string) {
 function URDFRobot({
   controlsRef,
   anglesRef,
+  initialCamera,
 }: {
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   anglesRef: React.RefObject<JointAngles | undefined>;
+  initialCamera: CameraState | null;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const rootRef = useRef<THREE.Group>(null);
   const robotRef = useRef<URDFRobotType | null>(null);
+  const { camera } = useThree();
 
   useEffect(() => {
     const group = groupRef.current;
@@ -80,9 +84,16 @@ function URDFRobot({
       group.position.z = -center.z;
       group.position.y = -box.min.y;
 
-      const newCenter = new THREE.Vector3(0, (box.max.y - box.min.y) / 2, 0);
       if (controlsRef.current) {
-        controlsRef.current.target.copy(newCenter);
+        if (initialCamera) {
+          // Restore saved camera — applied here so it runs after model centering
+          camera.position.set(initialCamera.px, initialCamera.py, initialCamera.pz);
+          controlsRef.current.target.set(initialCamera.tx, initialCamera.ty, initialCamera.tz);
+        } else {
+          // Default: orbit around model center
+          const modelCenter = new THREE.Vector3(0, (box.max.y - box.min.y) / 2, 0);
+          controlsRef.current.target.copy(modelCenter);
+        }
         controlsRef.current.update();
       }
     };
@@ -96,7 +107,7 @@ function URDFRobot({
     return () => {
       while (group.children.length) group.remove(group.children[0]);
     };
-  }, [controlsRef]);
+  }, [controlsRef, camera, initialCamera]);
 
   useFrame(({ clock }) => {
     // Idle bob
@@ -171,11 +182,34 @@ function URDFRobot({
 function Scene({
   autoRotate,
   anglesRef,
+  initialCamera,
+  onCameraChange,
 }: {
   autoRotate: boolean;
   anglesRef: React.RefObject<JointAngles | undefined>;
+  initialCamera: CameraState | null;
+  onCameraChange: (state: CameraState) => void;
 }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
+
+  // Save camera when the user finishes a drag/zoom gesture
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const handler = () => {
+      const cam = controls.object;
+      onCameraChange({
+        px: cam.position.x,
+        py: cam.position.y,
+        pz: cam.position.z,
+        tx: controls.target.x,
+        ty: controls.target.y,
+        tz: controls.target.z,
+      });
+    };
+    controls.addEventListener("end", handler);
+    return () => controls.removeEventListener("end", handler);
+  }, [onCameraChange]);
 
   return (
     <>
@@ -207,7 +241,7 @@ function Scene({
         infiniteGrid
       />
 
-      <URDFRobot controlsRef={controlsRef} anglesRef={anglesRef} />
+      <URDFRobot controlsRef={controlsRef} anglesRef={anglesRef} initialCamera={initialCamera} />
 
       <OrbitControls
         ref={controlsRef}
@@ -357,11 +391,15 @@ function SimInfoPanel({
 export function MujocoViewer({
   className,
   jointAngles,
+  initialCamera = null,
+  onCameraChange,
 }: {
   className?: string;
   jointAngles?: JointAngles;
+  initialCamera?: CameraState | null;
+  onCameraChange?: (state: CameraState) => void;
 }) {
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(false);
 
   // Ref passed into the Canvas so useFrame always reads the latest value without
   // depending on React prop diffing across the Canvas boundary. Intentional
@@ -369,6 +407,8 @@ export function MujocoViewer({
   const anglesRef = useRef<JointAngles | undefined>(jointAngles);
   // eslint-disable-next-line react-hooks/refs
   anglesRef.current = jointAngles;
+
+  const handleCameraChange = (state: CameraState) => onCameraChange?.(state);
 
   return (
     <div className={className} style={{ position: "relative", width: "100%", height: "100%" }}>
@@ -378,7 +418,12 @@ export function MujocoViewer({
         shadows
         style={{ display: "block", width: "100%", height: "100%", background: "transparent" }}
       >
-        <Scene autoRotate={autoRotate} anglesRef={anglesRef} />
+        <Scene
+          autoRotate={autoRotate}
+          anglesRef={anglesRef}
+          initialCamera={initialCamera}
+          onCameraChange={handleCameraChange}
+        />
       </Canvas>
 
       <SimInfoPanel autoRotate={autoRotate} onToggleRotate={() => setAutoRotate((r) => !r)} />

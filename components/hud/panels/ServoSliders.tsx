@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { HudPanel } from "../core/HudPanel";
 import { HudSeparator } from "../core/HudSeparator";
 
@@ -76,21 +77,15 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
     ],
   },
   {
-    label: "ARMS",
-    sublabel: "ch 4–9",
+    label: "ARM LEFT",
+    sublabel: "ch 7–9",
     joints: [
       {
         key: "Servo-Showlder-L-Front-Back",
         label: "Shoulder FB L",
         sublabel: "ch 7 · shoulder_fb",
       },
-      {
-        key: "Servo-Showlder-R-Front-Back",
-        label: "Shoulder FB R",
-        sublabel: "ch 4 · shoulder_fb",
-      },
-      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (L, axis+Z) / +π/2 (R, axis−Z).
-      // scale=+1 for L (moving slider right raises arm), scale=−1 for R (axis flipped).
+      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (axis+Z).
       {
         key: "Servo-Showlder-L-Inward-Outward",
         label: "Shoulder Lat L",
@@ -98,6 +93,19 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
         haltRad: -H,
         scale: +1,
       },
+      { key: "Servo-Forearm-L", label: "Forearm Lat L", sublabel: "ch 9 · forearm_lat" },
+    ],
+  },
+  {
+    label: "ARM RIGHT",
+    sublabel: "ch 4–6",
+    joints: [
+      {
+        key: "Servo-Showlder-R-Front-Back",
+        label: "Shoulder FB R",
+        sublabel: "ch 4 · shoulder_fb",
+      },
+      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (axis−Z, scale=−1).
       {
         key: "Servo-Showlder-R-Inward-Outward",
         label: "Shoulder Lat R",
@@ -105,7 +113,6 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
         haltRad: -H,
         scale: -1,
       },
-      { key: "Servo-Forearm-L", label: "Forearm Lat L", sublabel: "ch 9 · forearm_lat" },
       { key: "Servo-Forearm-R", label: "Forearm Lat R", sublabel: "ch 6 · forearm_lat" },
     ],
   },
@@ -130,34 +137,43 @@ function JointSlider({
   const pct = (valueDeg / 180) * 100;
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-0">
-          <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+        <div className="flex flex-col gap-0.5">
+          <span
+            className="font-label tracking-wider uppercase"
+            style={{ fontSize: 13, color: "rgba(0,220,255,0.95)", fontWeight: 700 }}
+          >
             {label}
           </span>
-          <span
-            className="font-mono text-[7px] tracking-wide"
-            style={{ color: "rgba(0,200,255,0.28)" }}
-          >
+          <span className="font-mono" style={{ fontSize: 10, color: "rgba(0,200,255,0.55)" }}>
             {sublabel}
           </span>
         </div>
-        <span className="text-hud-primary font-mono text-[10px] tabular-nums">{valueDeg}°</span>
+        <span
+          className="font-mono tabular-nums"
+          style={{ fontSize: 16, fontWeight: 700, color: "rgba(0,255,200,0.95)" }}
+        >
+          {valueDeg}°
+        </span>
       </div>
-      <div className="group relative flex h-4 items-center">
-        <div className="bg-hud-border/40 relative h-0.5 w-full overflow-visible rounded-full">
+      <div className="group relative flex h-5 items-center">
+        <div
+          className="relative h-0.5 w-full overflow-visible rounded-full"
+          style={{ background: "rgba(0,200,255,0.25)" }}
+        >
           {/* Halt marker at 90° (50%) */}
           <div
-            className="bg-hud-primary/50 absolute top-1/2 h-2 w-px -translate-y-1/2"
-            style={{ left: "50%" }}
+            className="absolute top-1/2 h-3 w-px -translate-y-1/2"
+            style={{ left: "50%", background: "rgba(0,200,255,0.65)" }}
           />
           {/* Fill from halt to current */}
           <div
-            className="bg-hud-primary/60 absolute top-0 h-full rounded-full transition-none"
+            className="absolute top-0 h-full rounded-full transition-none"
             style={{
               left: `${Math.min(pct, 50)}%`,
               width: `${Math.abs(pct - 50)}%`,
+              background: "rgba(0,220,255,0.80)",
             }}
           />
         </div>
@@ -174,8 +190,8 @@ function JointSlider({
         />
         {/* Custom thumb */}
         <div
-          className="border-hud-primary bg-hud-bg pointer-events-none absolute h-3 w-3 -translate-x-1/2 rounded-full border transition-none"
-          style={{ left: `${pct}%` }}
+          className="bg-hud-bg pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full transition-none"
+          style={{ left: `${pct}%`, border: "2px solid rgba(0,220,255,0.95)" }}
         />
       </div>
     </div>
@@ -183,8 +199,9 @@ function JointSlider({
 }
 
 export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
+  const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>({});
+
   const setJoint = (key: keyof JointAngles, displayDeg: number, haltRad = 0, scale = 1) => {
-    // urdfRad = haltRad + (displayDeg − 90) × D × scale
     onChange({ ...angles, [key]: haltRad + (displayDeg - 90) * D * scale });
   };
 
@@ -193,15 +210,20 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
 
   const resetAll = () => onChange({ ...DEFAULT_JOINT_ANGLES });
 
+  const toggle = (gi: number) => setCollapsed((prev) => ({ ...prev, [gi]: !prev[gi] }));
+
   return (
     <HudPanel title="Servo Control" status="online" cornerBrackets className="h-full">
       <div className="flex h-full flex-col gap-3 overflow-auto p-3">
         <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-0">
-            <span className="font-label text-hud-text-dim text-[9px] tracking-widest uppercase">
+          <div className="flex flex-col gap-0.5">
+            <span
+              className="font-label tracking-wider uppercase"
+              style={{ fontSize: 13, color: "rgba(0,220,255,0.85)", fontWeight: 700 }}
+            >
               Manual Override
             </span>
-            <span className="font-mono text-[7px]" style={{ color: "rgba(0,200,255,0.30)" }}>
+            <span className="font-mono" style={{ fontSize: 10, color: "rgba(0,200,255,0.55)" }}>
               dbl-click slider → halt
             </span>
           </div>
@@ -214,32 +236,71 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
           </button>
         </div>
 
-        {JOINT_GROUPS.map((group, gi) => (
-          <div key={gi} className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <span className="font-label text-hud-primary text-[8px] tracking-[0.2em] uppercase">
-                {group.label}
-              </span>
-              <span
-                className="font-mono text-[7px] tracking-wide"
-                style={{ color: "rgba(0,200,255,0.35)" }}
+        {JOINT_GROUPS.map((group, gi) => {
+          const isCollapsed = !!collapsed[gi];
+          return (
+            <div key={gi} className="flex flex-col gap-2">
+              {/* Section header — click to collapse */}
+              <button
+                onClick={() => toggle(gi)}
+                className="flex w-full items-center gap-2 text-left"
               >
-                {group.sublabel}
-              </span>
-              <div className="bg-hud-border/40 h-px flex-1" />
+                {/* Chevron */}
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 10 10"
+                  style={{
+                    flexShrink: 0,
+                    color: "rgba(0,255,200,0.70)",
+                    transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)",
+                    transition: "transform 0.15s ease",
+                  }}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
+                  <polyline points="2,3 5,7 8,3" />
+                </svg>
+                <span
+                  className="font-label tracking-wider uppercase"
+                  style={{ fontSize: 12, color: "rgba(0,255,200,0.90)", fontWeight: 700 }}
+                >
+                  {group.label}
+                </span>
+                <span className="font-mono" style={{ fontSize: 10, color: "rgba(0,200,255,0.55)" }}>
+                  {group.sublabel}
+                </span>
+                {isCollapsed && (
+                  <span
+                    className="ml-1 font-mono"
+                    style={{ fontSize: 9, color: "rgba(0,200,255,0.40)" }}
+                  >
+                    {group.joints.length} joints
+                  </span>
+                )}
+                <div className="h-px flex-1" style={{ background: "rgba(0,200,255,0.20)" }} />
+              </button>
+
+              {/* Collapsible joint list */}
+              {!isCollapsed && (
+                <div className="flex flex-col gap-2">
+                  {group.joints.map(({ key, label, sublabel, haltRad, scale }) => (
+                    <JointSlider
+                      key={key}
+                      label={label}
+                      sublabel={sublabel}
+                      valueDeg={toDisplay(angles[key], haltRad, scale)}
+                      onChange={(deg) => setJoint(key, deg, haltRad, scale)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {gi < JOINT_GROUPS.length - 1 && <HudSeparator />}
             </div>
-            {group.joints.map(({ key, label, sublabel, haltRad, scale }) => (
-              <JointSlider
-                key={key}
-                label={label}
-                sublabel={sublabel}
-                valueDeg={toDisplay(angles[key], haltRad, scale)}
-                onChange={(deg) => setJoint(key, deg, haltRad, scale)}
-              />
-            ))}
-            {gi < JOINT_GROUPS.length - 1 && <HudSeparator />}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </HudPanel>
   );

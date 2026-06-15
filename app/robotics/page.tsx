@@ -17,6 +17,11 @@ import {
   MujocoViewer,
 } from "@/components/hud";
 import { FloatingPanel } from "@/components/hud/panels/FloatingPanel";
+import {
+  ServoSliders,
+  DEFAULT_JOINT_ANGLES,
+  type JointAngles,
+} from "@/components/hud/panels/ServoSliders";
 import { ROBOTICS_JOINTS, ROBOTICS_TORQUE, ROBOTICS_TASKS } from "@/lib/hud-data";
 import {
   type PanelId,
@@ -32,7 +37,15 @@ import {
 
 // ─── Panel content ────────────────────────────────────────────────────────────
 
-function PanelContent({ id }: { id: PanelId }) {
+function PanelContent({
+  id,
+  jointAngles,
+  onJointAnglesChange,
+}: {
+  id: PanelId;
+  jointAngles: JointAngles;
+  onJointAnglesChange: (angles: JointAngles) => void;
+}) {
   switch (id) {
     case "joint-status":
       return (
@@ -184,6 +197,9 @@ function PanelContent({ id }: { id: PanelId }) {
           </div>
         </HudPanel>
       );
+
+    case "servo-control":
+      return <ServoSliders angles={jointAngles} onChange={onJointAnglesChange} />;
   }
 }
 
@@ -192,6 +208,7 @@ function PanelContent({ id }: { id: PanelId }) {
 export default function RoboticsPage() {
   const [panels, setPanels] = useState<PanelRect[]>(INITIAL_PANELS);
   const [bgPos, setBgPos] = useState("0px 0px");
+  const [jointAngles, setJointAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
   const canvasRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction | null>(null);
   const maxZ = useRef(10);
@@ -334,7 +351,7 @@ export default function RoboticsPage() {
             zIndex: 0,
           }}
         >
-          <MujocoViewer height={640} />
+          <MujocoViewer height={640} jointAngles={jointAngles} />
         </div>
 
         {panels.map((panel) => (
@@ -345,7 +362,11 @@ export default function RoboticsPage() {
             onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
             onFocus={bringToFront}
           >
-            <PanelContent id={panel.id} />
+            <PanelContent
+              id={panel.id}
+              jointAngles={jointAngles}
+              onJointAnglesChange={setJointAngles}
+            />
           </FloatingPanel>
         ))}
       </div>

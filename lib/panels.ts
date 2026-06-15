@@ -6,7 +6,8 @@ export type PanelId =
   | "nav-overlay"
   | "motor-telemetry"
   | "system-metrics"
-  | "mission-status";
+  | "mission-status"
+  | "servo-control";
 
 export type ResizeEdge = "right" | "bottom" | "corner";
 
@@ -45,6 +46,7 @@ export const INITIAL_PANELS: PanelRect[] = [
   { id: "motor-telemetry", x: 280, y: 520, w: 440, h: 160, z: 1 },
   { id: "system-metrics", x: 760, y: 400, w: 280, h: 280, z: 1 },
   { id: "mission-status", x: 280, y: 0, w: 440, h: 120, z: 1 },
+  { id: "servo-control", x: 1080, y: 0, w: 280, h: 680, z: 1 },
 ];
 
 // Snap v (canvas-space) so that canvas_origin + v is a multiple of GRID.

@@ -116,8 +116,10 @@ function URDFRobot({
       "Servo-Knee-R-Bottom": kneeRBot,
       "Servo-Ankle-L": ankleL,
       "Servo-Ankle-R": ankleR,
-      "Servo-Showlder-L-Front-Back": shldrL,
-      "Servo-Showlder-R-Front-Back": shldrR,
+      "Servo-Showlder-L-Front-Back": shldrLFB,
+      "Servo-Showlder-R-Front-Back": shldrRFB,
+      "Servo-Showlder-L-Inward-Outward": shldrLLat,
+      "Servo-Showlder-R-Inward-Outward": shldrRLat,
       "Servo-Forearm-L": forearmL,
       "Servo-Forearm-R": forearmR,
     } = angles;
@@ -131,8 +133,10 @@ function URDFRobot({
     robot.setJointValue("Servo-Knee-R-Bottom", kneeRBot);
     robot.setJointValue("Servo-Ankle-L", ankleL);
     robot.setJointValue("Servo-Ankle-R", ankleR);
-    robot.setJointValue("Servo-Showlder-L-Front-Back", shldrL);
-    robot.setJointValue("Servo-Showlder-R-Front-Back", shldrR);
+    robot.setJointValue("Servo-Showlder-L-Front-Back", shldrLFB);
+    robot.setJointValue("Servo-Showlder-R-Front-Back", shldrRFB);
+    robot.setJointValue("Servo-Showlder-L-Inward-Outward", shldrLLat);
+    robot.setJointValue("Servo-Showlder-R-Inward-Outward", shldrRLat);
     robot.setJointValue("Servo-Forearm-L", forearmL);
     robot.setJointValue("Servo-Forearm-R", forearmR);
 

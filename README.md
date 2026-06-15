@@ -1,8 +1,8 @@
 # futurespace-ui
 
-Sci-fi HUD component library and digital twin dashboard for monitoring the Optimus biped robot. Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4.
+Sci-fi HUD and digital twin dashboard for the Optimus biped robot. Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4.
 
-Currently a **prototype** — all data is static/mocked. The goal is a real-time digital twin with live joint angles, sensor data, and remote actuation over WebSocket.
+Currently a **prototype** — sensor data is simulated. The goal is a real-time digital twin with live joint angles, sensor telemetry, and remote actuation over WebSocket.
 
 ## Stack
 
@@ -46,13 +46,40 @@ components/hud/         # HUD component library
   core/                 # HudPanel, HudBadge, HudLabel, HudSeparator, HudStatusDot
   data/                 # GaugeCircle, WaveformBar, HudProgressBar, LiveCounter, MiniBarChart
   visualization/        # MujocoViewer, TopographyMap, NodeGraph, ColorWheel, ...
-  panels/               # SystemStatsCard, RoboticsPanel, UptimeCounter, ...
+  panels/               # ServoSliders, PowerConsumption, FloatingPanel, ...
   index.ts              # Barrel export — import all HUD components from here
 lib/
   hud-data.ts           # Mock data and type definitions
+  panels.ts             # Panel layout types, IDs, and initial positions
+  persist.ts            # localStorage helpers (panels, camera, joint angles)
   utils.ts              # cn() helper
 public/models/optimus/  # URDF + STL meshes for the 3D viewer
 ```
+
+## HUD Panels
+
+| Panel               | Description                                                                                       |
+| ------------------- | ------------------------------------------------------------------------------------------------- |
+| Navigation Overlay  | Topographic map placeholder                                                                       |
+| FreeRTOS · ESP32-C3 | Simulated task monitor — imu (200 Hz), cpg (100 Hz), telemetry (50 Hz), peripherals               |
+| Servo Control       | Manual joint sliders for all 14 servo channels, grouped by limb, collapsible                      |
+| Power Draw          | Simulated power consumption based on servo velocity — rolling 5 s chart, SG995/S3003 specs at 6 V |
+
+Panel positions, camera orientation/zoom, and joint angles all persist to `localStorage` and restore on reload. Use the **Reset Layout** button in the header to clear saved state.
+
+## 3D Viewer
+
+`MujocoViewer` loads `public/models/optimus/Assembly.urdf` and renders each STL mesh as a dark fill + neon edge wireframe. Edge colours by part type: body = cyan, joints = aqua, tendons = green. Orbit controls with zoom/pan; camera state persists across reloads.
+
+## Planned: Live Robot Integration
+
+WebSocket API is defined in `optimus/firmware/src/comms/telemetry.cpp`:
+
+- Connect to `ws://<robot-ip>:81`
+- Receive JSON at 10 Hz: `{ t, pitch, roll, left: {hr,hp,k,ar}, right: {hr,hp,k,ar}, cpg: {...} }`
+- Send commands: `set_period`, `set_amp_*`, `set_neutral`, `calibrate_imu`
+
+The integration path: a React context/hook opens the WebSocket, parses state, and feeds live joint angles into `MujocoViewer` and the HUD panels.
 
 ## Deployment
 

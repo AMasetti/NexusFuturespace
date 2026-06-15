@@ -242,46 +242,119 @@ function SimTime() {
   );
 }
 
-// ─── Public component ─────────────────────────────────────────────────────────
+// ─── Sim info panel ───────────────────────────────────────────────────────────
 
-const OV: React.CSSProperties = {
-  position: "absolute",
-  zIndex: 10,
-  fontFamily: "var(--font-jetbrains-mono, monospace)",
-  fontSize: "9px",
-  letterSpacing: "0.10em",
-  lineHeight: "1.75",
-  color: "rgba(0,200,255,0.50)",
-  pointerEvents: "none",
-};
-
-const BTN: React.CSSProperties = {
+const PANEL: React.CSSProperties = {
   position: "absolute",
   bottom: 12,
   left: 12,
   zIndex: 20,
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  padding: "4px 12px",
-  cursor: "pointer",
-  border: "1px solid rgba(0,200,255,0.35)",
-  background: "rgba(2,11,20,0.70)",
-  borderRadius: 2,
   fontFamily: "var(--font-jetbrains-mono, monospace)",
   fontSize: "9px",
-  letterSpacing: "0.12em",
-  textTransform: "uppercase",
-  color: "rgba(0,200,255,0.80)",
+  letterSpacing: "0.10em",
+  lineHeight: "1.9",
+  background: "rgba(2,11,20,0.78)",
+  border: "1px solid rgba(0,200,255,0.20)",
+  borderRadius: 3,
+  padding: "8px 12px",
+  display: "flex",
+  gap: 20,
+  pointerEvents: "auto",
 };
+
+const DIM: React.CSSProperties = { color: "rgba(0,200,255,0.45)" };
+const VAL: React.CSSProperties = { color: "rgba(0,200,255,0.85)" };
+const HEAD: React.CSSProperties = { color: "rgba(0,200,255,0.95)", fontWeight: 700 };
+
+function SimInfoPanel({
+  autoRotate,
+  onToggleRotate,
+}: {
+  autoRotate: boolean;
+  onToggleRotate: () => void;
+}) {
+  return (
+    <div style={PANEL}>
+      {/* Model info */}
+      <div>
+        <div style={HEAD}>MUJOCO v3.2.3</div>
+        <div style={DIM}>
+          MODEL &nbsp;<span style={VAL}>OPTIMUS FULL</span>
+        </div>
+        <div style={DIM}>
+          DOF &nbsp;&nbsp;&nbsp;<span style={VAL}>23</span>
+        </div>
+        <div style={DIM}>
+          JOINTS <span style={VAL}>23</span>
+        </div>
+        <div style={DIM}>
+          BODIES <span style={VAL}>25</span>
+        </div>
+        <div style={DIM}>
+          MESHES <span style={VAL}>24 STL</span>
+        </div>
+      </div>
+
+      {/* Sim params */}
+      <div>
+        <SimTime />
+        <div style={DIM}>
+          TIMESTEP &nbsp;<span style={VAL}>0.001 s</span>
+        </div>
+        <div style={DIM}>
+          SOLVER &nbsp;&nbsp;&nbsp;<span style={VAL}>PGS</span>
+        </div>
+        <div style={DIM}>
+          INTEGRATOR <span style={VAL}>EULER</span>
+        </div>
+        <div style={DIM}>
+          GRAVITY &nbsp;&nbsp;<span style={VAL}>9.81 m/s²</span>
+        </div>
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end" }}>
+        <button
+          onClick={onToggleRotate}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 10px",
+            cursor: "pointer",
+            border: "1px solid rgba(0,200,255,0.30)",
+            background: "rgba(0,200,255,0.06)",
+            borderRadius: 2,
+            fontFamily: "inherit",
+            fontSize: "9px",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            color: "rgba(0,200,255,0.80)",
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              display: "inline-block",
+              background: autoRotate ? "rgba(0,255,156,0.9)" : "rgba(0,200,255,0.4)",
+            }}
+          />
+          {autoRotate ? "AUTO-ROTATE  ON" : "AUTO-ROTATE OFF"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Public component ─────────────────────────────────────────────────────────
 
 export function MujocoViewer({
   className,
-  height = 520,
   jointAngles,
 }: {
   className?: string;
-  height?: number;
   jointAngles?: JointAngles;
 }) {
   const [autoRotate, setAutoRotate] = useState(true);
@@ -294,44 +367,17 @@ export function MujocoViewer({
   anglesRef.current = jointAngles;
 
   return (
-    <div className={className} style={{ position: "relative", height }}>
-      <div style={{ ...OV, top: 10, left: 12 }}>
-        <div style={{ color: "rgba(0,200,255,0.90)", fontWeight: 700 }}>MUJOCO v3.2.3</div>
-        <div>MODEL · OPTIMUS FULL</div>
-        <div>DOF · 23</div>
-        <div>JOINTS· 23</div>
-        <div>BODIES· 25</div>
-        <div>MESHES· 24 STL</div>
-      </div>
-      <div style={{ ...OV, top: 10, right: 12, textAlign: "right" }}>
-        <SimTime />
-        <div>TIMESTEP · 0.001 s</div>
-        <div>SOLVER · PGS</div>
-        <div>INTEGRATOR· EULER</div>
-        <div>GRAVITY · 9.81 m/s²</div>
-      </div>
-
+    <div className={className} style={{ position: "relative", width: "100%", height: "100%" }}>
       <Canvas
         camera={{ position: [1.2, 1.4, 2.0], fov: 44 }}
         gl={{ antialias: true, alpha: true }}
         shadows
-        style={{ display: "block", background: "transparent" }}
+        style={{ display: "block", width: "100%", height: "100%", background: "transparent" }}
       >
         <Scene autoRotate={autoRotate} anglesRef={anglesRef} />
       </Canvas>
 
-      <button style={BTN} onClick={() => setAutoRotate((r) => !r)}>
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            display: "inline-block",
-            background: autoRotate ? "rgba(0,255,156,0.9)" : "rgba(0,200,255,0.4)",
-          }}
-        />
-        {autoRotate ? "AUTO-ROTATE  ON" : "AUTO-ROTATE  OFF"}
-      </button>
+      <SimInfoPanel autoRotate={autoRotate} onToggleRotate={() => setAutoRotate((r) => !r)} />
     </div>
   );
 }

@@ -4,8 +4,9 @@ import { useRef, useEffect, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
-import URDFLoader from "urdf-loader";
+import URDFLoader, { type URDFRobot as URDFRobotType } from "urdf-loader";
 import { STLLoader, OrbitControls as OrbitControlsImpl } from "three-stdlib";
+import type { JointAngles } from "@/components/hud/panels/ServoSliders";
 
 const PI = Math.PI;
 const H = PI / 2;
@@ -26,9 +27,16 @@ function pickEdgeMat(path: string) {
 
 // ─── URDF robot ───────────────────────────────────────────────────────────────
 
-function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControlsImpl | null> }) {
+function URDFRobot({
+  controlsRef,
+  anglesRef,
+}: {
+  controlsRef: React.RefObject<OrbitControlsImpl | null>;
+  anglesRef: React.RefObject<JointAngles | undefined>;
+}) {
   const groupRef = useRef<THREE.Group>(null);
   const rootRef = useRef<THREE.Group>(null);
+  const robotRef = useRef<URDFRobotType | null>(null);
 
   useEffect(() => {
     const group = groupRef.current;
@@ -43,7 +51,6 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
         path,
         (geo) => {
           geo.computeVertexNormals();
-          // Solid dark fill — occludes back faces so hidden edges disappear
           const fill = new THREE.Mesh(
             geo,
             new THREE.MeshBasicMaterial({
@@ -53,7 +60,6 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
               polygonOffsetUnits: 1,
             })
           );
-          // Neon contour edges rendered on top
           const edges = new THREE.EdgesGeometry(geo, 15);
           const lines = new THREE.LineSegments(edges, pickEdgeMat(path));
           const wrapper = new THREE.Group();
@@ -74,7 +80,6 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
       group.position.z = -center.z;
       group.position.y = -box.min.y;
 
-      // Point OrbitControls at the actual robot center after repositioning
       const newCenter = new THREE.Vector3(0, (box.max.y - box.min.y) / 2, 0);
       if (controlsRef.current) {
         controlsRef.current.target.copy(newCenter);
@@ -84,6 +89,7 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
 
     loader.load("/models/optimus/Assembly.urdf", (robot) => {
       robot.rotation.x = -H;
+      robotRef.current = robot;
       group.add(robot);
     });
 
@@ -93,8 +99,60 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
   }, [controlsRef]);
 
   useFrame(({ clock }) => {
+    // Idle bob
     if (rootRef.current)
       rootRef.current.position.y = Math.sin(clock.getElapsedTime() * 0.8) * 0.005;
+
+    const robot = robotRef.current;
+    const angles = anglesRef.current;
+    if (!robot || !angles) return;
+
+    const {
+      "Servo-Hip-L": hipL,
+      "Servo-Hip-R": hipR,
+      "Servo-Knee-L-Top": kneeLTop,
+      "Servo-Knee-R-Top": kneeRTop,
+      "Servo-Knee-L-Bottom": kneeLBot,
+      "Servo-Knee-R-Bottom": kneeRBot,
+      "Servo-Ankle-L": ankleL,
+      "Servo-Ankle-R": ankleR,
+      "Servo-Showlder-L-Front-Back": shldrL,
+      "Servo-Showlder-R-Front-Back": shldrR,
+      "Servo-Forearm-L": forearmL,
+      "Servo-Forearm-R": forearmR,
+    } = angles;
+
+    // Actuated joints — set directly
+    robot.setJointValue("Servo-Hip-L", hipL);
+    robot.setJointValue("Servo-Hip-R", hipR);
+    robot.setJointValue("Servo-Knee-L-Top", kneeLTop);
+    robot.setJointValue("Servo-Knee-R-Top", kneeRTop);
+    robot.setJointValue("Servo-Knee-L-Bottom", kneeLBot);
+    robot.setJointValue("Servo-Knee-R-Bottom", kneeRBot);
+    robot.setJointValue("Servo-Ankle-L", ankleL);
+    robot.setJointValue("Servo-Ankle-R", ankleR);
+    robot.setJointValue("Servo-Showlder-L-Front-Back", shldrL);
+    robot.setJointValue("Servo-Showlder-R-Front-Back", shldrR);
+    robot.setJointValue("Servo-Forearm-L", forearmL);
+    robot.setJointValue("Servo-Forearm-R", forearmR);
+
+    // ── Left leg parallelogram ─────────────────────────────────────────────────
+    // Sartorius-LT (parent=Hip-L): counter-rotates so it stays vertical in world
+    robot.setJointValue("Unactuated-Knee-L-Top", -kneeLTop);
+    robot.setJointValue("Unactuated-Tendon-L-Top", -kneeLTop);
+    // Anckle-L (parent=Sartorius-LB): world angle = hipL + (-hipL) + kneeLTop + kneeLBot + θ
+    // For ankle to stay level → θ = -(kneeLTop + kneeLBot)
+    robot.setJointValue("Unactuated-Knee-L-Bottom", -kneeLBot);
+    // Tendon-LB parent is Anckle-L (not Sartorius-LB), so it must also cancel ankleL
+    robot.setJointValue("Unactuated-Tendon-L-Bottom", kneeLBot);
+
+    // ── Right leg parallelogram ────────────────────────────────────────────────
+    // R joints have axis=−Z: a value θ rotates −θ physically, so formulas are
+    // sign-flipped vs left to produce the same physical counter-rotation.
+    robot.setJointValue("Unactuated-Knee-R-Top", -kneeRTop);
+    robot.setJointValue("Unactuated-Tendon-R-Top", -kneeRTop);
+    robot.setJointValue("Unactuated-Knee-R-Bottom", -kneeRBot);
+    robot.setJointValue("Unactuated-Tendon-R-Bottom", kneeRBot);
   });
 
   return (
@@ -106,7 +164,13 @@ function URDFRobot({ controlsRef }: { controlsRef: React.RefObject<OrbitControls
 
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
-function Scene({ autoRotate }: { autoRotate: boolean }) {
+function Scene({
+  autoRotate,
+  anglesRef,
+}: {
+  autoRotate: boolean;
+  anglesRef: React.RefObject<JointAngles | undefined>;
+}) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   return (
@@ -139,7 +203,7 @@ function Scene({ autoRotate }: { autoRotate: boolean }) {
         infiniteGrid
       />
 
-      <URDFRobot controlsRef={controlsRef} />
+      <URDFRobot controlsRef={controlsRef} anglesRef={anglesRef} />
 
       <OrbitControls
         ref={controlsRef}
@@ -211,8 +275,23 @@ const BTN: React.CSSProperties = {
   color: "rgba(0,200,255,0.80)",
 };
 
-export function MujocoViewer({ className, height = 520 }: { className?: string; height?: number }) {
+export function MujocoViewer({
+  className,
+  height = 520,
+  jointAngles,
+}: {
+  className?: string;
+  height?: number;
+  jointAngles?: JointAngles;
+}) {
   const [autoRotate, setAutoRotate] = useState(true);
+
+  // Ref passed into the Canvas so useFrame always reads the latest value without
+  // depending on React prop diffing across the Canvas boundary. Intentional
+  // render-time mutation — we want the raw mutable ref, not reactive updates.
+  const anglesRef = useRef<JointAngles | undefined>(jointAngles);
+  // eslint-disable-next-line react-hooks/refs
+  anglesRef.current = jointAngles;
 
   return (
     <div className={className} style={{ position: "relative", height }}>
@@ -238,7 +317,7 @@ export function MujocoViewer({ className, height = 520 }: { className?: string; 
         shadows
         style={{ display: "block", background: "transparent" }}
       >
-        <Scene autoRotate={autoRotate} />
+        <Scene autoRotate={autoRotate} anglesRef={anglesRef} />
       </Canvas>
 
       <button style={BTN} onClick={() => setAutoRotate((r) => !r)}>

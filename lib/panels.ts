@@ -7,7 +7,8 @@ export type PanelId =
   | "motor-telemetry"
   | "system-metrics"
   | "mission-status"
-  | "servo-control";
+  | "servo-control"
+  | "power-draw";
 
 export type ResizeEdge = "right" | "bottom" | "corner";
 
@@ -40,13 +41,14 @@ export const MIN_H = 120; // 3 cells
 // All positions and dimensions are multiples of GRID.
 // Gap between panels = 1 cell (40 px).
 export const INITIAL_PANELS: PanelRect[] = [
-  { id: "joint-status", x: 0, y: 0, w: 240, h: 400, z: 1 },
-  { id: "power-systems", x: 0, y: 440, w: 240, h: 240, z: 1 },
+  // { id: "joint-status",    x: 0,    y: 0,   w: 240, h: 400, z: 1 },
+  // { id: "power-systems",   x: 0,    y: 440, w: 240, h: 240, z: 1 },
+  // { id: "motor-telemetry", x: 280,  y: 520, w: 440, h: 160, z: 1 },
+  // { id: "mission-status",  x: 280,  y: 0,   w: 440, h: 120, z: 1 },
   { id: "nav-overlay", x: 760, y: 0, w: 280, h: 360, z: 1 },
-  { id: "motor-telemetry", x: 280, y: 520, w: 440, h: 160, z: 1 },
   { id: "system-metrics", x: 760, y: 400, w: 280, h: 280, z: 1 },
-  { id: "mission-status", x: 280, y: 0, w: 440, h: 120, z: 1 },
   { id: "servo-control", x: 1080, y: 0, w: 280, h: 800, z: 1 },
+  { id: "power-draw", x: 1400, y: 0, w: 280, h: 480, z: 1 },
 ];
 
 // Snap v (canvas-space) so that canvas_origin + v is a multiple of GRID.

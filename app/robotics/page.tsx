@@ -338,20 +338,16 @@ export default function RoboticsPage() {
         onPointerUp={onPointerUp}
         onPointerLeave={onPointerUp}
       >
-        {/* 3D robot viewer — centered, behind floating panels */}
+        {/* 3D robot viewer — full canvas, behind floating panels */}
         <div
           style={{
             position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: 520,
-            height: 640,
+            inset: 0,
             pointerEvents: "auto",
             zIndex: 0,
           }}
         >
-          <MujocoViewer height={640} jointAngles={jointAngles} />
+          <MujocoViewer jointAngles={jointAngles} />
         </div>
 
         {panels.map((panel) => (

@@ -8,7 +8,8 @@ export type PanelId =
   | "system-metrics"
   | "mission-status"
   | "servo-control"
-  | "power-draw";
+  | "power-draw"
+  | "imu-live";
 
 export type ResizeEdge = "right" | "bottom" | "corner";
 
@@ -47,6 +48,7 @@ export const INITIAL_PANELS: PanelRect[] = [
   // { id: "mission-status",  x: 280,  y: 0,   w: 440, h: 120, z: 1 },
   { id: "nav-overlay", x: 760, y: 0, w: 280, h: 360, z: 1 },
   { id: "system-metrics", x: 760, y: 400, w: 280, h: 280, z: 1 },
+  { id: "imu-live", x: 40, y: 0, w: 280, h: 440, z: 1 },
   { id: "servo-control", x: 1080, y: 0, w: 280, h: 800, z: 1 },
   { id: "power-draw", x: 1400, y: 0, w: 280, h: 480, z: 1 },
 ];

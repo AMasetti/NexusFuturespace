@@ -20,6 +20,7 @@ import {
 } from "@/components/hud/panels/ServoSliders";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { ROBOTICS_TASKS } from "@/lib/hud-data";
+import { RosProvider, useRosTopic, useRosStatus } from "@/lib/ros";
 import {
   type PanelId,
   type PanelRect,
@@ -203,17 +204,233 @@ function FreeRTOSPanel() {
   );
 }
 
+// ─── IMU live panel ───────────────────────────────────────────────────────────
+
+interface ImuOrientation {
+  x: number;
+  y: number;
+  z: number;
+}
+interface ImuRaw {
+  linear_acceleration: { x: number; y: number; z: number };
+  angular_velocity: { x: number; y: number; z: number };
+}
+
+function AxisBar({ value, max, color }: { value: number; max: number; color: string }) {
+  const pct = Math.min(Math.abs(value) / max, 1) * 100;
+  const sign = value >= 0 ? "+" : "−";
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className="font-mono tabular-nums"
+        style={{ fontSize: 11, color: "rgba(0,200,255,0.65)", width: 12, textAlign: "right" }}
+      >
+        {sign}
+      </span>
+      <div
+        className="relative h-2 flex-1 overflow-hidden rounded-full"
+        style={{ background: "rgba(0,200,255,0.12)" }}
+      >
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
+      </div>
+      <span
+        className="font-mono tabular-nums"
+        style={{ fontSize: 12, color, width: 46, textAlign: "right", fontWeight: 700 }}
+      >
+        {value.toFixed(2)}
+      </span>
+    </div>
+  );
+}
+
+function ImuLivePanel() {
+  const status = useRosStatus();
+  const orientation = useRosTopic<{ vector: ImuOrientation }>(
+    "/optimus/imu/orientation",
+    "geometry_msgs/Vector3Stamped"
+  );
+  const raw = useRosTopic<ImuRaw>("/optimus/imu/raw", "sensor_msgs/Imu");
+  const isLive = status === "connected" && orientation !== null;
+
+  const pitch = orientation?.vector.x ?? 0;
+  const roll = orientation?.vector.y ?? 0;
+  const yawRate = orientation?.vector.z ?? 0;
+  const ax = raw?.linear_acceleration.x ?? 0;
+  const ay = raw?.linear_acceleration.y ?? 0;
+  const az = raw?.linear_acceleration.z ?? 0;
+  const gx = raw?.angular_velocity.x ?? 0;
+  const gy = raw?.angular_velocity.y ?? 0;
+  const gz = raw?.angular_velocity.z ?? 0;
+
+  const toDeg = (r: number) => ((r * 180) / Math.PI).toFixed(1);
+
+  // Gravity vector arrow: rotate SVG arrow by pitch
+  const arrowAngle = (pitch * 180) / Math.PI;
+
+  return (
+    <HudPanel
+      title="IMU · MPU6050"
+      subtitle={isLive ? "LIVE" : "NO SIGNAL"}
+      status={isLive ? "online" : "warning"}
+      cornerBrackets
+      className="h-full"
+    >
+      <div className="flex h-full flex-col gap-2 overflow-auto p-3">
+        {/* Pitch / Roll — large readout */}
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: "PITCH", val: toDeg(pitch), color: "#00DCFF" },
+            { label: "ROLL", val: toDeg(roll), color: "#00FF9C" },
+          ].map(({ label, val, color }) => (
+            <div
+              key={label}
+              className="flex flex-col items-center gap-1 rounded py-2"
+              style={{
+                background: "rgba(0,200,255,0.06)",
+                border: "1px solid rgba(0,200,255,0.14)",
+              }}
+            >
+              <span
+                className="font-mono uppercase"
+                style={{ fontSize: 10, color: "rgba(0,200,255,0.60)", letterSpacing: "0.18em" }}
+              >
+                {label}
+              </span>
+              <span
+                className="font-mono font-bold tabular-nums"
+                style={{ fontSize: 30, color, letterSpacing: "-0.02em", lineHeight: 1 }}
+              >
+                {val}°
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Yaw rate */}
+        <div
+          className="flex items-center justify-between rounded px-2 py-1.5"
+          style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.14)" }}
+        >
+          <span
+            className="font-mono uppercase"
+            style={{ fontSize: 10, color: "rgba(0,200,255,0.60)", letterSpacing: "0.14em" }}
+          >
+            YAW RATE
+          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="font-mono font-bold tabular-nums"
+              style={{ fontSize: 16, color: "rgba(180,100,255,1.0)" }}
+            >
+              {((yawRate * 180) / Math.PI).toFixed(1)}°/s
+            </span>
+            <span className="font-mono" style={{ fontSize: 9, color: "rgba(0,200,255,0.40)" }}>
+              gyro·drifts
+            </span>
+          </div>
+        </div>
+
+        {/* Gravity arrow */}
+        <div
+          className="flex items-center gap-3 rounded px-2 py-1.5"
+          style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.14)" }}
+        >
+          <svg width={36} height={36} viewBox="-18 -18 36 36" style={{ flexShrink: 0 }}>
+            <circle
+              cx={0}
+              cy={0}
+              r={16}
+              fill="none"
+              stroke="rgba(0,200,255,0.20)"
+              strokeWidth={1}
+            />
+            <g transform={`rotate(${arrowAngle})`}>
+              <line x1={0} y1={-11} x2={0} y2={11} stroke="#00FF9C" strokeWidth={2} />
+              <polygon points="0,-16 -4,-9 4,-9" fill="#00FF9C" />
+            </g>
+          </svg>
+          <span className="font-mono" style={{ fontSize: 10, color: "rgba(0,200,255,0.55)" }}>
+            gravity direction (pitch plane)
+          </span>
+        </div>
+
+        <HudSeparator />
+
+        {/* Accel bars */}
+        <div className="flex flex-col gap-1.5">
+          <span
+            className="font-mono uppercase"
+            style={{ fontSize: 10, color: "rgba(0,200,255,0.65)", letterSpacing: "0.16em" }}
+          >
+            ACCEL m/s²
+          </span>
+          {[
+            { label: "X", value: ax, color: "rgba(0,220,255,0.90)" },
+            { label: "Y", value: ay, color: "rgba(0,255,156,0.90)" },
+            { label: "Z", value: az, color: "rgba(180,100,255,0.90)" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex items-center gap-2">
+              <span
+                className="font-mono font-bold"
+                style={{ fontSize: 11, color: "rgba(0,200,255,0.70)", width: 10 }}
+              >
+                {label}
+              </span>
+              <AxisBar value={value} max={20} color={color} />
+            </div>
+          ))}
+        </div>
+
+        <HudSeparator />
+
+        {/* Gyro bars */}
+        <div className="flex flex-col gap-1.5">
+          <span
+            className="font-mono uppercase"
+            style={{ fontSize: 10, color: "rgba(0,200,255,0.65)", letterSpacing: "0.16em" }}
+          >
+            GYRO rad/s
+          </span>
+          {[
+            { label: "X", value: gx, color: "rgba(0,220,255,0.90)" },
+            { label: "Y", value: gy, color: "rgba(0,255,156,0.90)" },
+            { label: "Z", value: gz, color: "rgba(180,100,255,0.90)" },
+          ].map(({ label, value, color }) => (
+            <div key={label} className="flex items-center gap-2">
+              <span
+                className="font-mono font-bold"
+                style={{ fontSize: 11, color: "rgba(0,200,255,0.70)", width: 10 }}
+              >
+                {label}
+              </span>
+              <AxisBar value={value} max={Math.PI} color={color} />
+            </div>
+          ))}
+        </div>
+      </div>
+    </HudPanel>
+  );
+}
+
 // ─── Panel content ────────────────────────────────────────────────────────────
 
 function PanelContent({
   id,
   jointAngles,
   onJointAnglesChange,
+  controlMode,
+  onTakeControl,
+  onReleaseControl,
 }: {
   id: PanelId;
   jointAngles: JointAngles;
   onJointAnglesChange: (angles: JointAngles) => void;
+  controlMode: "observe" | "override";
+  onTakeControl: () => void;
+  onReleaseControl: () => void;
 }) {
+  const rosStatus = useRosStatus();
+
   switch (id) {
     // case "joint-status":
     //   return (
@@ -352,8 +569,47 @@ function PanelContent({
         </HudPanel>
       );
 
-    case "servo-control":
-      return <ServoSliders angles={jointAngles} onChange={onJointAnglesChange} />;
+    case "imu-live":
+      return <ImuLivePanel />;
+
+    case "servo-control": {
+      const isConnected = rosStatus === "connected";
+      const isOverride = controlMode === "override";
+      return (
+        <ServoSliders
+          angles={jointAngles}
+          onChange={isOverride ? onJointAnglesChange : () => {}}
+          readOnly={isConnected && !isOverride}
+          headerExtra={
+            isConnected ? (
+              isOverride ? (
+                <button
+                  onClick={onReleaseControl}
+                  className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                  style={{
+                    border: "1px solid rgba(255,100,100,0.50)",
+                    color: "rgba(255,120,120,0.85)",
+                  }}
+                >
+                  Release Control
+                </button>
+              ) : (
+                <button
+                  onClick={onTakeControl}
+                  className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                  style={{
+                    border: "1px solid rgba(0,255,156,0.50)",
+                    color: "rgba(0,255,156,0.85)",
+                  }}
+                >
+                  Take Control
+                </button>
+              )
+            ) : undefined
+          }
+        />
+      );
+    }
 
     case "power-draw":
       return <PowerConsumption angles={jointAngles} />;
@@ -369,6 +625,9 @@ export default function RoboticsPage() {
   const [panels, setPanels] = useState<PanelRect[]>(INITIAL_PANELS);
   const [bgPos, setBgPos] = useState("0px 0px");
   const [jointAngles, setJointAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
+  const [controlMode, setControlMode] = useState<"observe" | "override">("observe");
+  const handleTakeControl = () => setControlMode("override");
+  const handleReleaseControl = () => setControlMode("observe");
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const interaction = useRef<Interaction | null>(null);
@@ -492,73 +751,78 @@ export default function RoboticsPage() {
   }, [panels]);
 
   return (
-    <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
-        <div className="flex items-center gap-3">
-          <HudStatusDot status="online" size="md" pulse />
-          <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
-            Nexus Robotics
-          </span>
-          <HudBadge variant="info" label="PROTO-02" size="sm" />
-        </div>
-        <div className="flex items-center gap-4">
-          <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
-          <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
-          <div className="bg-hud-border h-4 w-px" />
-          <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
-          <div className="bg-hud-border h-4 w-px" />
-          <button
-            onClick={() => {
-              clearPersistedLayout();
-              setPanels(INITIAL_PANELS);
-            }}
-            className="border-hud-border/50 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-            style={{ border: "1px solid" }}
-          >
-            Reset Layout
-          </button>
-        </div>
-      </div>
-
-      {/* ── Canvas ─────────────────────────────────────────────────── */}
-      <div
-        ref={canvasRef}
-        className="relative min-h-0 flex-1 overflow-hidden select-none"
-        style={{
-          backgroundImage: "radial-gradient(circle, rgba(13,74,107,0.55) 1px, transparent 1px)",
-          backgroundSize: `${GRID}px ${GRID}px`,
-          backgroundPosition: bgPos,
-        }}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerLeave={onPointerUp}
-      >
-        {/* 3D robot viewer — full canvas, behind floating panels */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "auto", zIndex: 0 }}>
-          <MujocoViewer
-            jointAngles={jointAngles}
-            initialCamera={initialCamera}
-            onCameraChange={saveCamera}
-          />
+    <RosProvider>
+      <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
+          <div className="flex items-center gap-3">
+            <HudStatusDot status="online" size="md" pulse />
+            <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
+              Nexus Robotics
+            </span>
+            <HudBadge variant="info" label="PROTO-02" size="sm" />
+          </div>
+          <div className="flex items-center gap-4">
+            <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
+            <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
+            <div className="bg-hud-border h-4 w-px" />
+            <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
+            <div className="bg-hud-border h-4 w-px" />
+            <button
+              onClick={() => {
+                clearPersistedLayout();
+                setPanels(INITIAL_PANELS);
+              }}
+              className="border-hud-border/50 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+              style={{ border: "1px solid" }}
+            >
+              Reset Layout
+            </button>
+          </div>
         </div>
 
-        {panels.map((panel) => (
-          <FloatingPanel
-            key={panel.id}
-            panel={panel}
-            onDragStart={(e, id) => startInteraction(e, id, "drag")}
-            onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
-            onFocus={bringToFront}
-          >
-            <PanelContent
-              id={panel.id}
+        {/* ── Canvas ─────────────────────────────────────────────────── */}
+        <div
+          ref={canvasRef}
+          className="relative min-h-0 flex-1 overflow-hidden select-none"
+          style={{
+            backgroundImage: "radial-gradient(circle, rgba(13,74,107,0.55) 1px, transparent 1px)",
+            backgroundSize: `${GRID}px ${GRID}px`,
+            backgroundPosition: bgPos,
+          }}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerLeave={onPointerUp}
+        >
+          {/* 3D robot viewer — full canvas, behind floating panels */}
+          <div style={{ position: "absolute", inset: 0, pointerEvents: "auto", zIndex: 0 }}>
+            <MujocoViewer
               jointAngles={jointAngles}
-              onJointAnglesChange={setJointAngles}
+              initialCamera={initialCamera}
+              onCameraChange={saveCamera}
             />
-          </FloatingPanel>
-        ))}
+          </div>
+
+          {panels.map((panel) => (
+            <FloatingPanel
+              key={panel.id}
+              panel={panel}
+              onDragStart={(e, id) => startInteraction(e, id, "drag")}
+              onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
+              onFocus={bringToFront}
+            >
+              <PanelContent
+                id={panel.id}
+                jointAngles={jointAngles}
+                onJointAnglesChange={setJointAngles}
+                controlMode={controlMode}
+                onTakeControl={handleTakeControl}
+                onReleaseControl={handleReleaseControl}
+              />
+            </FloatingPanel>
+          ))}
+        </div>
       </div>
-    </div>
+    </RosProvider>
   );
 }

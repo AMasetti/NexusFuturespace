@@ -121,6 +121,8 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
 interface ServoSlidersProps {
   angles: JointAngles;
   onChange: (angles: JointAngles) => void;
+  readOnly?: boolean;
+  headerExtra?: React.ReactNode;
 }
 
 function JointSlider({
@@ -128,11 +130,13 @@ function JointSlider({
   sublabel,
   valueDeg,
   onChange,
+  readOnly = false,
 }: {
   label: string;
   sublabel: string;
   valueDeg: number; // 0–180, halt = 90
   onChange: (deg: number) => void;
+  readOnly?: boolean;
 }) {
   const pct = (valueDeg / 180) * 100;
 
@@ -184,9 +188,9 @@ function JointSlider({
           max={180}
           step={1}
           value={valueDeg}
-          onChange={(e) => onChange(Number(e.target.value))}
-          onDoubleClick={() => onChange(90)}
-          className="absolute inset-0 w-full cursor-pointer opacity-0"
+          onChange={(e) => !readOnly && onChange(Number(e.target.value))}
+          onDoubleClick={() => !readOnly && onChange(90)}
+          className={`absolute inset-0 w-full opacity-0 ${readOnly ? "cursor-not-allowed" : "cursor-pointer"}`}
         />
         {/* Custom thumb */}
         <div
@@ -198,10 +202,16 @@ function JointSlider({
   );
 }
 
-export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
+export function ServoSliders({
+  angles,
+  onChange,
+  readOnly = false,
+  headerExtra,
+}: ServoSlidersProps) {
   const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>({});
 
   const setJoint = (key: keyof JointAngles, displayDeg: number, haltRad = 0, scale = 1) => {
+    if (readOnly) return;
     onChange({ ...angles, [key]: haltRad + (displayDeg - 90) * D * scale });
   };
 
@@ -227,13 +237,18 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
               dbl-click slider → halt
             </span>
           </div>
-          <button
-            onClick={resetAll}
-            className="border-hud-border/60 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-            style={{ border: "1px solid" }}
-          >
-            Reset
-          </button>
+          <div className="flex items-center gap-2">
+            {headerExtra}
+            {!readOnly && (
+              <button
+                onClick={resetAll}
+                className="border-hud-border/60 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                style={{ border: "1px solid" }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
 
         {JOINT_GROUPS.map((group, gi) => {
@@ -292,6 +307,7 @@ export function ServoSliders({ angles, onChange }: ServoSlidersProps) {
                       sublabel={sublabel}
                       valueDeg={toDisplay(angles[key], haltRad, scale)}
                       onChange={(deg) => setJoint(key, deg, haltRad, scale)}
+                      readOnly={readOnly}
                     />
                   ))}
                 </div>

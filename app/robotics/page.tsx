@@ -637,6 +637,65 @@ function PanelContent({
   }
 }
 
+// ─── TLS cert trust banner ────────────────────────────────────────────────────
+
+function TrustCertBanner() {
+  const status = useRosStatus();
+  const [showBanner, setShowBanner] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    if (status === "connecting") {
+      timerRef.current = setTimeout(() => setShowBanner(true), 5000);
+    } else {
+      timerRef.current = setTimeout(() => setShowBanner(false), 0);
+    }
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [status]);
+
+  if (!showBanner || dismissed) return null;
+
+  const wsUrl = process.env.NEXT_PUBLIC_ROS_WS_URL ?? "wss://localhost:9090";
+  const trustUrl = wsUrl.replace(/^wss?:\/\//, "https://").replace(/\/.*$/, "");
+
+  return (
+    <div
+      className="flex shrink-0 items-center justify-between gap-4 rounded px-3 py-2"
+      style={{
+        background: "rgba(255,160,0,0.08)",
+        border: "1px solid rgba(255,160,0,0.40)",
+      }}
+    >
+      <div className="flex items-center gap-3">
+        <span style={{ fontSize: 14, color: "rgba(255,180,0,0.90)" }}>⚠</span>
+        <span className="font-mono" style={{ fontSize: 11, color: "rgba(255,180,0,0.85)" }}>
+          ROS bridge unreachable — browser may be blocking the self-signed TLS cert.
+        </span>
+        <a
+          href={trustUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="font-mono underline transition-opacity hover:opacity-100"
+          style={{ fontSize: 11, color: "rgba(255,200,0,0.90)", opacity: 0.85 }}
+        >
+          Open {trustUrl} → click Advanced → Proceed
+        </a>
+      </div>
+      <button
+        onClick={() => setDismissed(true)}
+        className="font-mono"
+        style={{ fontSize: 10, color: "rgba(255,180,0,0.55)" }}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 // ─── ROS joint sync ───────────────────────────────────────────────────────────
 
 interface RosJointState {
@@ -867,6 +926,8 @@ export default function RoboticsPage() {
         onRobotConnectedChange={setRobotConnected}
       />
       <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
+        {/* ── TLS cert trust prompt ───────────────────────────────────── */}
+        <TrustCertBanner />
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
           <div className="flex items-center gap-3">

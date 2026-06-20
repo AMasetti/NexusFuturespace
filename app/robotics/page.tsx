@@ -17,6 +17,7 @@ import {
   ServoSliders,
   DEFAULT_JOINT_ANGLES,
   FIRMWARE_TO_JOINT,
+  FIRMWARE_TO_URDF_OFFSET,
   JOINT_TO_FIRMWARE,
   type JointAngles,
 } from "@/components/hud/panels/ServoSliders";
@@ -651,9 +652,11 @@ function RosJointSync({
     const next = { ...DEFAULT_JOINT_ANGLES };
     let changed = false;
     for (let i = 0; i < jointStates.name.length; i++) {
-      const key = FIRMWARE_TO_JOINT[jointStates.name[i]];
+      const fwName = jointStates.name[i];
+      const key = FIRMWARE_TO_JOINT[fwName];
       if (key !== undefined) {
-        next[key] = jointStates.position[i];
+        const offset = FIRMWARE_TO_URDF_OFFSET[fwName] ?? 0;
+        next[key] = jointStates.position[i] + offset;
         changed = true;
       }
     }
@@ -678,8 +681,9 @@ function RosJointSync({
       string,
     ][]) {
       if (jointAngles[uiKey] !== prev[uiKey]) {
+        const offset = FIRMWARE_TO_URDF_OFFSET[fwName] ?? 0;
         names.push(fwName);
-        positions.push(jointAngles[uiKey]);
+        positions.push(jointAngles[uiKey] - offset);
       }
     }
     if (names.length > 0) {

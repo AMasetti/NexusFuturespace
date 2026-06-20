@@ -25,6 +25,7 @@ const D = Math.PI / 180;
 
 // Maps firmware joint names (from /optimus/joint_states and set_joint WS commands)
 // to JointAngles keys. The URDF keys are legacy and don't match firmware names.
+// hip_yaw is intentionally absent — no UI slider exists for it yet.
 export const FIRMWARE_TO_JOINT: Record<string, keyof JointAngles> = {
   l_hip_roll: "Servo-Hip-L",
   l_hip_pitch: "Servo-Knee-L-Top",
@@ -40,6 +41,16 @@ export const FIRMWARE_TO_JOINT: Record<string, keyof JointAngles> = {
   r_shoulder_fb: "Servo-Showlder-R-Front-Back",
   r_shoulder_lat: "Servo-Showlder-R-Inward-Outward",
   r_forearm_lat: "Servo-Forearm-R",
+};
+
+// Coordinate offset applied when converting firmware rad → URDF rad stored in JointAngles.
+// Firmware reports physical rad from servo center (0 = halt for all joints).
+// URDF stores rad relative to mesh neutral, which differs for shoulder lat:
+//   mesh neutral = arms horizontal = 0 URDF rad; arms-down (halt) = −π/2 URDF rad.
+// So: urdf_rad = firmware_rad + FIRMWARE_TO_URDF_OFFSET[name]
+export const FIRMWARE_TO_URDF_OFFSET: Partial<Record<string, number>> = {
+  l_shoulder_lat: -Math.PI / 2,
+  r_shoulder_lat: -Math.PI / 2,
 };
 
 export const JOINT_TO_FIRMWARE = Object.fromEntries(

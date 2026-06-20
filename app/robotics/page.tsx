@@ -421,6 +421,7 @@ function PanelContent({
   id,
   jointAngles,
   onJointAnglesChange,
+  onJointAnglesCommit,
   controlMode,
   onTakeControl,
   onReleaseControl,
@@ -428,6 +429,7 @@ function PanelContent({
   id: PanelId;
   jointAngles: JointAngles;
   onJointAnglesChange: (angles: JointAngles) => void;
+  onJointAnglesCommit: (angles: JointAngles) => void;
   controlMode: "observe" | "override";
   onTakeControl: () => void;
   onReleaseControl: () => void;
@@ -582,6 +584,7 @@ function PanelContent({
         <ServoSliders
           angles={jointAngles}
           onChange={isOverride ? onJointAnglesChange : () => {}}
+          onCommit={isOverride ? onJointAnglesCommit : undefined}
           readOnly={isConnected && !isOverride}
           headerExtra={
             isConnected ? (
@@ -636,11 +639,11 @@ interface RosJointState {
  */
 function RosJointSync({
   controlMode,
-  jointAngles,
+  committedAngles,
   onJointAnglesChange,
 }: {
   controlMode: "observe" | "override";
-  jointAngles: JointAngles;
+  committedAngles: JointAngles;
   onJointAnglesChange: (a: JointAngles) => void;
 }) {
   const jointStates = useRosTopic<RosJointState>("/optimus/joint_states", "sensor_msgs/JointState");
@@ -663,15 +666,15 @@ function RosJointSync({
     if (changed) onJointAnglesChange(next);
   }, [jointStates, controlMode, onJointAnglesChange]);
 
-  // Override mode: publish slider changes to the robot via ROS
-  const prevAnglesRef = useRef<JointAngles | null>(null);
+  // Override mode: publish on pointerUp (committedAngles), not on every drag tick.
+  const prevCommittedRef = useRef<JointAngles | null>(null);
   useEffect(() => {
     if (controlMode !== "override") {
-      prevAnglesRef.current = null;
+      prevCommittedRef.current = null;
       return;
     }
-    const prev = prevAnglesRef.current;
-    prevAnglesRef.current = jointAngles;
+    const prev = prevCommittedRef.current;
+    prevCommittedRef.current = committedAngles;
     if (!prev) return;
 
     const names: string[] = [];
@@ -680,10 +683,10 @@ function RosJointSync({
       keyof JointAngles,
       string,
     ][]) {
-      if (jointAngles[uiKey] !== prev[uiKey]) {
+      if (committedAngles[uiKey] !== prev[uiKey]) {
         const offset = FIRMWARE_TO_URDF_OFFSET[fwName] ?? 0;
         names.push(fwName);
-        positions.push(jointAngles[uiKey] - offset);
+        positions.push(committedAngles[uiKey] - offset);
       }
     }
     if (names.length > 0) {
@@ -694,7 +697,7 @@ function RosJointSync({
         effort: [],
       });
     }
-  }, [jointAngles, controlMode, publish]);
+  }, [committedAngles, controlMode, publish]);
 
   return null;
 }
@@ -705,6 +708,8 @@ export default function RoboticsPage() {
   const [panels, setPanels] = useState<PanelRect[]>(INITIAL_PANELS);
   const [bgPos, setBgPos] = useState("0px 0px");
   const [jointAngles, setJointAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
+  // committedAngles only updates on pointerUp — this is what gets published to the robot.
+  const [committedAngles, setCommittedAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
   const [controlMode, setControlMode] = useState<"observe" | "override">("observe");
   const handleTakeControl = () => setControlMode("override");
   const handleReleaseControl = () => setControlMode("observe");
@@ -834,8 +839,11 @@ export default function RoboticsPage() {
     <RosProvider>
       <RosJointSync
         controlMode={controlMode}
-        jointAngles={jointAngles}
-        onJointAnglesChange={setJointAngles}
+        committedAngles={committedAngles}
+        onJointAnglesChange={(a) => {
+          setJointAngles(a);
+          setCommittedAngles(a);
+        }}
       />
       <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
         {/* ── Header ─────────────────────────────────────────────────── */}
@@ -900,6 +908,7 @@ export default function RoboticsPage() {
                 id={panel.id}
                 jointAngles={jointAngles}
                 onJointAnglesChange={setJointAngles}
+                onJointAnglesCommit={setCommittedAngles}
                 controlMode={controlMode}
                 onTakeControl={handleTakeControl}
                 onReleaseControl={handleReleaseControl}

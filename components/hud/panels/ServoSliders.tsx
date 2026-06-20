@@ -155,6 +155,8 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
 interface ServoSlidersProps {
   angles: JointAngles;
   onChange: (angles: JointAngles) => void;
+  /** Called when the user releases a slider or double-clicks to reset — use to send commands to the robot. */
+  onCommit?: (angles: JointAngles) => void;
   readOnly?: boolean;
   headerExtra?: React.ReactNode;
 }
@@ -164,12 +166,14 @@ function JointSlider({
   sublabel,
   valueDeg,
   onChange,
+  onCommit,
   readOnly = false,
 }: {
   label: string;
   sublabel: string;
   valueDeg: number; // 0–180, halt = 90
   onChange: (deg: number) => void;
+  onCommit: (deg: number) => void;
   readOnly?: boolean;
 }) {
   const pct = (valueDeg / 180) * 100;
@@ -215,7 +219,7 @@ function JointSlider({
             }}
           />
         </div>
-        {/* Invisible range — double-click resets to halt */}
+        {/* Invisible range — pointerUp commits, double-click resets to halt */}
         <input
           type="range"
           min={0}
@@ -223,7 +227,13 @@ function JointSlider({
           step={1}
           value={valueDeg}
           onChange={(e) => !readOnly && onChange(Number(e.target.value))}
-          onDoubleClick={() => !readOnly && onChange(90)}
+          onPointerUp={(e) => !readOnly && onCommit(Number((e.target as HTMLInputElement).value))}
+          onDoubleClick={() => {
+            if (!readOnly) {
+              onChange(90);
+              onCommit(90);
+            }
+          }}
           className={`absolute inset-0 w-full opacity-0 ${readOnly ? "cursor-not-allowed" : "cursor-pointer"}`}
         />
         {/* Custom thumb */}
@@ -239,6 +249,7 @@ function JointSlider({
 export function ServoSliders({
   angles,
   onChange,
+  onCommit,
   readOnly = false,
   headerExtra,
 }: ServoSlidersProps) {
@@ -249,10 +260,20 @@ export function ServoSliders({
     onChange({ ...angles, [key]: haltRad + (displayDeg - 90) * D * scale });
   };
 
+  const commitJoint = (key: keyof JointAngles, displayDeg: number, haltRad = 0, scale = 1) => {
+    if (readOnly) return;
+    const next = { ...angles, [key]: haltRad + (displayDeg - 90) * D * scale };
+    onChange(next);
+    onCommit?.(next);
+  };
+
   const toDisplay = (urdfRad: number, haltRad = 0, scale = 1) =>
     Math.max(0, Math.min(180, Math.round(90 + ((urdfRad - haltRad) / D) * scale)));
 
-  const resetAll = () => onChange({ ...DEFAULT_JOINT_ANGLES });
+  const resetAll = () => {
+    onChange({ ...DEFAULT_JOINT_ANGLES });
+    onCommit?.({ ...DEFAULT_JOINT_ANGLES });
+  };
 
   const toggle = (gi: number) => setCollapsed((prev) => ({ ...prev, [gi]: !prev[gi] }));
 
@@ -341,6 +362,7 @@ export function ServoSliders({
                       sublabel={sublabel}
                       valueDeg={toDisplay(angles[key], haltRad, scale)}
                       onChange={(deg) => setJoint(key, deg, haltRad, scale)}
+                      onCommit={(deg) => commitJoint(key, deg, haltRad, scale)}
                       readOnly={readOnly}
                     />
                   ))}

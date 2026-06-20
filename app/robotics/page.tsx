@@ -423,6 +423,7 @@ function PanelContent({
   onJointAnglesChange,
   onJointAnglesCommit,
   controlMode,
+  robotConnected,
   onTakeControl,
   onReleaseControl,
 }: {
@@ -431,6 +432,7 @@ function PanelContent({
   onJointAnglesChange: (angles: JointAngles) => void;
   onJointAnglesCommit: (angles: JointAngles) => void;
   controlMode: "observe" | "override";
+  robotConnected: boolean;
   onTakeControl: () => void;
   onReleaseControl: () => void;
 }) {
@@ -600,16 +602,26 @@ function PanelContent({
                   Release Control
                 </button>
               ) : (
-                <button
-                  onClick={onTakeControl}
-                  className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-                  style={{
-                    border: "1px solid rgba(0,255,156,0.50)",
-                    color: "rgba(0,255,156,0.85)",
-                  }}
-                >
-                  Take Control
-                </button>
+                <div className="flex flex-col items-end gap-0.5">
+                  <button
+                    onClick={onTakeControl}
+                    className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                    style={{
+                      border: `1px solid ${robotConnected ? "rgba(0,255,156,0.50)" : "rgba(255,180,0,0.50)"}`,
+                      color: robotConnected ? "rgba(0,255,156,0.85)" : "rgba(255,180,0,0.85)",
+                    }}
+                  >
+                    Take Control
+                  </button>
+                  {!robotConnected && (
+                    <span
+                      className="font-mono"
+                      style={{ fontSize: 8, color: "rgba(255,180,0,0.65)" }}
+                    >
+                      robot unreachable
+                    </span>
+                  )}
+                </div>
               )
             ) : undefined
           }
@@ -641,13 +653,20 @@ function RosJointSync({
   controlMode,
   committedAngles,
   onJointAnglesChange,
+  onRobotConnectedChange,
 }: {
   controlMode: "observe" | "override";
   committedAngles: JointAngles;
   onJointAnglesChange: (a: JointAngles) => void;
+  onRobotConnectedChange: (connected: boolean) => void;
 }) {
   const jointStates = useRosTopic<RosJointState>("/optimus/joint_states", "sensor_msgs/JointState");
+  const bridgeStatus = useRosTopic<{ data: string }>("/optimus/bridge/status", "std_msgs/String");
   const publish = useRosPublish();
+
+  useEffect(() => {
+    onRobotConnectedChange(bridgeStatus?.data === "connected");
+  }, [bridgeStatus, onRobotConnectedChange]);
 
   // Observe mode: mirror live joint states into UI
   useEffect(() => {
@@ -711,6 +730,7 @@ export default function RoboticsPage() {
   // committedAngles only updates on pointerUp — this is what gets published to the robot.
   const [committedAngles, setCommittedAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
   const [controlMode, setControlMode] = useState<"observe" | "override">("observe");
+  const [robotConnected, setRobotConnected] = useState(false);
   const handleTakeControl = () => setControlMode("override");
   const handleReleaseControl = () => setControlMode("observe");
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
@@ -844,6 +864,7 @@ export default function RoboticsPage() {
           setJointAngles(a);
           setCommittedAngles(a);
         }}
+        onRobotConnectedChange={setRobotConnected}
       />
       <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
         {/* ── Header ─────────────────────────────────────────────────── */}
@@ -910,6 +931,7 @@ export default function RoboticsPage() {
                 onJointAnglesChange={setJointAngles}
                 onJointAnglesCommit={setCommittedAngles}
                 controlMode={controlMode}
+                robotConnected={robotConnected}
                 onTakeControl={handleTakeControl}
                 onReleaseControl={handleReleaseControl}
               />

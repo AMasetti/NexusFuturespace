@@ -1,86 +1,132 @@
 # futurespace-ui
 
-Sci-fi HUD and digital twin dashboard for the Optimus biped robot. Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4.
+Sci-fi HUD digital twin for the Optimus biped robot. Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4.
 
-Currently a **prototype** — sensor data is simulated. The goal is a real-time digital twin with live joint angles, sensor telemetry, and remote actuation over WebSocket.
+Connects to the robot over **ROS 2 + rosbridge** — live IMU telemetry, real-time joint tracking, and bidirectional servo control from the browser.
 
 ## Stack
 
-- **Next.js 16** (App Router), React 19, TypeScript
-- **Tailwind CSS v4** with custom HUD design tokens
-- **Three.js / @react-three/fiber / drei** — 3D robot viewer
-- **urdf-loader** — loads Optimus URDF + STL meshes
-- **Framer Motion**, **Recharts**, **dnd-kit**, **Radix UI**, **Lucide**
+| Layer      | Tech                                               |
+| ---------- | -------------------------------------------------- |
+| Framework  | Next.js 16 (App Router), React 19, TypeScript      |
+| Styling    | Tailwind CSS v4, custom HUD design tokens          |
+| 3D viewer  | Three.js / @react-three/fiber / drei, urdf-loader  |
+| ROS bridge | roslib (WebSocket client → rosbridge_suite)        |
+| UI extras  | Framer Motion, Recharts, dnd-kit, Radix UI, Lucide |
 
-## Getting Started
+## Running locally (dev)
 
 ```bash
+cd futurespace-ui
 npm install
-npm run dev        # http://localhost:3000
+npm run dev        # http://localhost:3000/robotics
 ```
+
+For live robot data, also run the Docker stack (see [../docker/](../docker/)).
 
 ## Scripts
 
 ```bash
-npm run dev        # Dev server
+npm run dev        # Dev server with hot reload
 npm run build      # Production build
 npm run lint       # ESLint
-npm run type-check # TypeScript (no emit)
-npm run format     # Prettier
 ```
+
+## Docker deployment
+
+The production stack is two containers managed by `../docker/compose.yml`:
+
+```bash
+cd docker
+docker compose up --build
+# UI: http://localhost:3010/robotics
+```
+
+| Container        | Role                                                        |
+| ---------------- | ----------------------------------------------------------- |
+| `ros2-bridge`    | Connects to `ws://optimus.local:81`, publishes ROS 2 topics |
+| `futurespace-ui` | Next.js on :3000 + rosbridge (`wss://`) on :9090            |
+
+`NEXT_PUBLIC_ROS_WS_URL` is baked at build time — changing it requires `--build`.
+
+## Architecture
+
+```
+Robot (ESP32-C3)
+  ws://optimus.local:81   ← plain WS, LAN only
+        │
+        ▼
+  ros2-bridge container (ROS 2 Humble)
+        │  publishes
+        ├─ /optimus/imu/raw          (sensor_msgs/Imu)
+        ├─ /optimus/imu/orientation  (geometry_msgs/Vector3Stamped)
+        ├─ /optimus/imu/gravity      (geometry_msgs/Vector3Stamped)
+        └─ /optimus/joint_states     (sensor_msgs/JointState)
+        │  subscribes
+        ├─ /optimus/cmd/joint        → set_joint WS command
+        ├─ /optimus/cmd/neutral      → set_neutral WS command
+        └─ /optimus/cmd/calibrate_imu
+        │
+        ▼
+  rosbridge_suite   wss://:9090   ← TLS termination here
+        │
+        ▼
+  Browser — lib/ros.tsx (RosProvider + useRosTopic hooks)
+        │
+        ├─ IMU Live panel  — pitch, roll, yaw rate, accel/gyro, gravity arrow
+        ├─ Servo Control   — observe mode (tracks robot) / override mode (controls robot)
+        └─ Power Draw      — modelled current from joint velocity (MG995 physics)
+```
+
+## Control modes
+
+| Mode                  | Behaviour                                                                                                                                                                                                 |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Observe** (default) | Sliders and 3D viewer track the robot's live joint set points. Read-only.                                                                                                                                 |
+| **Override**          | Click "Take Control" — sliders pre-load to the robot's current pose (zero-jerk), become interactive. Moving a slider publishes immediately to `/optimus/cmd/joint`. Click "Release Control" to hand back. |
+
+When `NEXT_PUBLIC_ROS_WS_URL` is unset or rosbridge is unreachable, the UI falls back to simulated data and all panels still work.
 
 ## Routes
 
-| Route        | Purpose                                                                      |
-| ------------ | ---------------------------------------------------------------------------- |
-| `/`          | Home                                                                         |
-| `/robotics`  | Main HUD canvas — draggable/resizable floating panels with 3D Optimus viewer |
-| `/showcase`  | Full component showcase — every HUD widget rendered for visual reference     |
-| `/dashboard` | Alternate dashboard layout                                                   |
+| Route        | Purpose                                                                           |
+| ------------ | --------------------------------------------------------------------------------- |
+| `/robotics`  | Main HUD canvas — draggable/resizable floating panels with live 3D Optimus viewer |
+| `/showcase`  | Full component showcase — every HUD widget rendered for visual reference          |
+| `/dashboard` | Alternate dashboard layout                                                        |
 
-## Project Structure
+## Project structure
 
 ```
-app/                    # Next.js App Router pages
-components/hud/         # HUD component library
-  core/                 # HudPanel, HudBadge, HudLabel, HudSeparator, HudStatusDot
-  data/                 # GaugeCircle, WaveformBar, HudProgressBar, LiveCounter, MiniBarChart
-  visualization/        # MujocoViewer, TopographyMap, NodeGraph, ColorWheel, ...
-  panels/               # ServoSliders, PowerConsumption, FloatingPanel, ...
-  index.ts              # Barrel export — import all HUD components from here
+app/
+  robotics/page.tsx       # Main HUD page — panels, control mode state machine
+components/hud/
+  core/                   # HudPanel, HudBadge, HudLabel, HudSeparator, HudStatusDot
+  data/                   # GaugeCircle, WaveformBar, HudProgressBar, LiveCounter
+  visualization/          # MujocoViewer, TopographyMap, ...
+  panels/
+    ServoSliders.tsx      # 14-channel servo control (readOnly + headerExtra props)
+    PowerConsumption.tsx  # MG995/S3003 servo power model
+    FloatingPanel.tsx     # Drag/resize panel container
 lib/
-  hud-data.ts           # Mock data and type definitions
-  panels.ts             # Panel layout types, IDs, and initial positions
-  persist.ts            # localStorage helpers (panels, camera, joint angles)
-  utils.ts              # cn() helper
-public/models/optimus/  # URDF + STL meshes for the 3D viewer
+  ros.tsx                 # RosProvider, useRosTopic, useRosStatus, useRosPublish
+  panels.ts               # Panel layout types, IDs, initial positions
+  persist.ts              # localStorage helpers (panels, camera, joints)
+public/models/optimus/    # URDF + 24 STL meshes for the 3D viewer
 ```
 
-## HUD Panels
+## HUD panels
 
-| Panel               | Description                                                                                       |
-| ------------------- | ------------------------------------------------------------------------------------------------- |
-| Navigation Overlay  | Topographic map placeholder                                                                       |
-| FreeRTOS · ESP32-C3 | Simulated task monitor — imu (200 Hz), cpg (100 Hz), telemetry (50 Hz), peripherals               |
-| Servo Control       | Manual joint sliders for all 14 servo channels, grouped by limb, collapsible                      |
-| Power Draw          | Simulated power consumption based on servo velocity — rolling 5 s chart, SG995/S3003 specs at 6 V |
+| Panel               | Data source                                                                                             |
+| ------------------- | ------------------------------------------------------------------------------------------------------- |
+| IMU · MPU6050       | `/optimus/imu/orientation` + `/optimus/imu/raw` — pitch, roll, yaw rate, accel/gyro bars, gravity arrow |
+| FreeRTOS · ESP32-C3 | Static — task list, stack sizes, peripheral info (200 Hz IMU, 100 Hz CPG, 50 Hz telemetry)              |
+| Servo Control       | `/optimus/joint_states` in observe mode; publishes `/optimus/cmd/joint` in override mode                |
+| Power Draw          | Modelled from joint velocity using MG995 servo physics (idle 0.36 A → stall 2.0 A at 6 V)               |
+| Navigation Overlay  | Topographic map placeholder                                                                             |
 
-Panel positions, camera orientation/zoom, and joint angles all persist to `localStorage` and restore on reload. Use the **Reset Layout** button in the header to clear saved state.
+Panel positions, camera state, and joint angles persist to `localStorage`. **Reset Layout** in the header clears all saved state.
 
-## 3D Viewer
+## TLS
 
-`MujocoViewer` loads `public/models/optimus/Assembly.urdf` and renders each STL mesh as a dark fill + neon edge wireframe. Edge colours by part type: body = cyan, joints = aqua, tendons = green. Orbit controls with zoom/pan; camera state persists across reloads.
-
-## Planned: Live Robot Integration
-
-WebSocket API is defined in `optimus/firmware/src/comms/telemetry.cpp`:
-
-- Connect to `ws://<robot-ip>:81`
-- Receive JSON at 10 Hz: `{ t, pitch, roll, left: {hr,hp,k,ar}, right: {hr,hp,k,ar}, cpg: {...} }`
-- Send commands: `set_period`, `set_amp_*`, `set_neutral`, `calibrate_imu`
-
-The integration path: a React context/hook opens the WebSocket, parses state, and feeds live joint angles into `MujocoViewer` and the HUD panels.
-
-## Deployment
-
-Run locally or self-host. No cloud deployment configured.
+rosbridge runs with a self-signed TLS cert generated on first container boot (`/etc/rosbridge-tls/`). On first use, visit `https://localhost:9090` in your browser, accept the cert, then reload the UI. You only need to do this once per browser profile.

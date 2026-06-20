@@ -16,11 +16,13 @@ import { FloatingPanel } from "@/components/hud/panels/FloatingPanel";
 import {
   ServoSliders,
   DEFAULT_JOINT_ANGLES,
+  FIRMWARE_TO_JOINT,
+  JOINT_TO_FIRMWARE,
   type JointAngles,
 } from "@/components/hud/panels/ServoSliders";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { ROBOTICS_TASKS } from "@/lib/hud-data";
-import { RosProvider, useRosTopic, useRosStatus } from "@/lib/ros";
+import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
 import {
   type PanelId,
   type PanelRect,
@@ -619,6 +621,80 @@ function PanelContent({
   }
 }
 
+// ─── ROS joint sync ───────────────────────────────────────────────────────────
+
+interface RosJointState {
+  name: string[];
+  position: number[];
+}
+
+/**
+ * Mounts inside RosProvider. In observe mode, maps /optimus/joint_states
+ * (firmware names) into JointAngles (URDF keys) and drives jointAngles.
+ * In override mode, publishes slider changes as /optimus/cmd/joint messages.
+ */
+function RosJointSync({
+  controlMode,
+  jointAngles,
+  onJointAnglesChange,
+}: {
+  controlMode: "observe" | "override";
+  jointAngles: JointAngles;
+  onJointAnglesChange: (a: JointAngles) => void;
+}) {
+  const jointStates = useRosTopic<RosJointState>("/optimus/joint_states", "sensor_msgs/JointState");
+  const publish = useRosPublish();
+
+  // Observe mode: mirror live joint states into UI
+  useEffect(() => {
+    if (controlMode !== "observe" || !jointStates) return;
+    const next = { ...DEFAULT_JOINT_ANGLES };
+    let changed = false;
+    for (let i = 0; i < jointStates.name.length; i++) {
+      const key = FIRMWARE_TO_JOINT[jointStates.name[i]];
+      if (key !== undefined) {
+        next[key] = jointStates.position[i];
+        changed = true;
+      }
+    }
+    if (changed) onJointAnglesChange(next);
+  }, [jointStates, controlMode, onJointAnglesChange]);
+
+  // Override mode: publish slider changes to the robot via ROS
+  const prevAnglesRef = useRef<JointAngles | null>(null);
+  useEffect(() => {
+    if (controlMode !== "override") {
+      prevAnglesRef.current = null;
+      return;
+    }
+    const prev = prevAnglesRef.current;
+    prevAnglesRef.current = jointAngles;
+    if (!prev) return;
+
+    const names: string[] = [];
+    const positions: number[] = [];
+    for (const [uiKey, fwName] of Object.entries(JOINT_TO_FIRMWARE) as [
+      keyof JointAngles,
+      string,
+    ][]) {
+      if (jointAngles[uiKey] !== prev[uiKey]) {
+        names.push(fwName);
+        positions.push(jointAngles[uiKey]);
+      }
+    }
+    if (names.length > 0) {
+      publish("/optimus/cmd/joint", "sensor_msgs/JointState", {
+        name: names,
+        position: positions,
+        velocity: [],
+        effort: [],
+      });
+    }
+  }, [jointAngles, controlMode, publish]);
+
+  return null;
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RoboticsPage() {
@@ -752,6 +828,11 @@ export default function RoboticsPage() {
 
   return (
     <RosProvider>
+      <RosJointSync
+        controlMode={controlMode}
+        jointAngles={jointAngles}
+        onJointAnglesChange={setJointAngles}
+      />
       <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="flex shrink-0 items-center justify-between px-1 py-0.5">

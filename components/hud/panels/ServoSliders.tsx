@@ -23,6 +23,29 @@ export interface JointAngles {
 
 const D = Math.PI / 180;
 
+// Maps firmware joint names (from /optimus/joint_states and set_joint WS commands)
+// to JointAngles keys. The URDF keys are legacy and don't match firmware names.
+export const FIRMWARE_TO_JOINT: Record<string, keyof JointAngles> = {
+  l_hip_roll: "Servo-Hip-L",
+  l_hip_pitch: "Servo-Knee-L-Top",
+  l_knee: "Servo-Knee-L-Bottom",
+  l_ankle_roll: "Servo-Ankle-L",
+  r_hip_roll: "Servo-Hip-R",
+  r_hip_pitch: "Servo-Knee-R-Top",
+  r_knee: "Servo-Knee-R-Bottom",
+  r_ankle_roll: "Servo-Ankle-R",
+  l_shoulder_fb: "Servo-Showlder-L-Front-Back",
+  l_shoulder_lat: "Servo-Showlder-L-Inward-Outward",
+  l_forearm_lat: "Servo-Forearm-L",
+  r_shoulder_fb: "Servo-Showlder-R-Front-Back",
+  r_shoulder_lat: "Servo-Showlder-R-Inward-Outward",
+  r_forearm_lat: "Servo-Forearm-R",
+};
+
+export const JOINT_TO_FIRMWARE = Object.fromEntries(
+  Object.entries(FIRMWARE_TO_JOINT).map(([fw, ui]) => [ui, fw])
+) as Partial<Record<keyof JointAngles, string>>;
+
 // All joints: display 0–180°, halt = 90° center, URDF rad = (displayDeg − 90) × D.
 // Shoulder lat URDF zero is arms-horizontal (T-pose mesh neutral).
 // Arms-down (halt) = −π/2 for L (axis +Z) and +π/2 for R (axis −Z).

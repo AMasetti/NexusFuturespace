@@ -251,9 +251,13 @@ function calcGroupW(keys: readonly JointKey[], vel: Partial<Record<JointKey, num
 // ── Public component ──────────────────────────────────────────────────────────
 interface PowerConsumptionProps {
   angles: JointAngles;
+  /** Mobile collapse state — forwarded to the inner HudPanel. */
+  collapsed?: boolean;
+  /** Mobile toggle callback — forwarded to the inner HudPanel. */
+  onToggle?: () => void;
 }
 
-export function PowerConsumption({ angles }: PowerConsumptionProps) {
+export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumptionProps) {
   const prevAngles = useRef<JointAngles>(angles);
   const prevTime = useRef<number>(0);
   const smoothedW = useRef(BASELINE_W);
@@ -349,8 +353,15 @@ export function PowerConsumption({ angles }: PowerConsumptionProps) {
     textTransform: "uppercase" as const,
   };
   return (
-    <HudPanel title="Power Draw" status="online" cornerBrackets className="h-full">
-      <div className="flex h-full flex-col gap-4 overflow-auto p-3">
+    <HudPanel
+      title="Power Draw"
+      status="online"
+      cornerBrackets
+      className="h-full"
+      collapsed={collapsed}
+      onToggle={onToggle}
+    >
+      <div className="flex flex-col gap-4 overflow-auto p-3">
         {/* ── Servo model badges ─────────────────────────── */}
         <div className="flex gap-2">
           <div

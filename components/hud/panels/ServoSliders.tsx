@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import { HudPanel } from "../core/HudPanel";
 import { HudSeparator } from "../core/HudSeparator";
 
@@ -159,6 +159,10 @@ interface ServoSlidersProps {
   onCommit?: (angles: JointAngles) => void;
   readOnly?: boolean;
   headerExtra?: React.ReactNode;
+  /** Mobile collapse state — forwarded to the inner HudPanel. */
+  panelCollapsed?: boolean;
+  /** Mobile toggle callback — forwarded to the inner HudPanel. */
+  panelOnToggle?: () => void;
 }
 
 function JointSlider({
@@ -171,12 +175,35 @@ function JointSlider({
 }: {
   label: string;
   sublabel: string;
-  valueDeg: number; // 0–180, halt = 90
+  valueDeg: number;
   onChange: (deg: number) => void;
   onCommit: (deg: number) => void;
   readOnly?: boolean;
 }) {
-  const pct = (valueDeg / 180) * 100;
+  const ref = useRef<HTMLInputElement>(null);
+
+  // iOS Safari doesn't fire React's synthetic onChange during touch drag.
+  // Attach native listeners directly on the DOM node instead.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const handleInput = () => onChange(Number(el.value));
+    const handleChange = () => onCommit(Number(el.value));
+
+    el.addEventListener("input", handleInput);
+    el.addEventListener("change", handleChange);
+    return () => {
+      el.removeEventListener("input", handleInput);
+      el.removeEventListener("change", handleChange);
+    };
+  }, [onChange, onCommit]);
+
+  // Sync DOM value when parent resets or updates from outside (e.g. Reset button).
+  useEffect(() => {
+    const el = ref.current;
+    if (el && Number(el.value) !== valueDeg) el.value = String(valueDeg);
+  }, [valueDeg]);
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -199,49 +226,17 @@ function JointSlider({
           {valueDeg}°
         </span>
       </div>
-      <div className="group relative flex h-5 items-center">
-        <div
-          className="relative h-0.5 w-full overflow-visible rounded-full"
-          style={{ background: "rgba(0,200,255,0.25)" }}
-        >
-          {/* Halt marker at 90° (50%) */}
-          <div
-            className="absolute top-1/2 h-3 w-px -translate-y-1/2"
-            style={{ left: "50%", background: "rgba(0,200,255,0.65)" }}
-          />
-          {/* Fill from halt to current */}
-          <div
-            className="absolute top-0 h-full rounded-full transition-none"
-            style={{
-              left: `${Math.min(pct, 50)}%`,
-              width: `${Math.abs(pct - 50)}%`,
-              background: "rgba(0,220,255,0.80)",
-            }}
-          />
-        </div>
-        {/* Invisible range — pointerUp commits, double-click resets to halt */}
-        <input
-          type="range"
-          min={0}
-          max={180}
-          step={1}
-          value={valueDeg}
-          onChange={(e) => !readOnly && onChange(Number(e.target.value))}
-          onPointerUp={(e) => !readOnly && onCommit(Number((e.target as HTMLInputElement).value))}
-          onDoubleClick={() => {
-            if (!readOnly) {
-              onChange(90);
-              onCommit(90);
-            }
-          }}
-          className={`absolute inset-0 w-full opacity-0 ${readOnly ? "cursor-not-allowed" : "cursor-pointer"}`}
-        />
-        {/* Custom thumb */}
-        <div
-          className="bg-hud-bg pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full transition-none"
-          style={{ left: `${pct}%`, border: "2px solid rgba(0,220,255,0.95)" }}
-        />
-      </div>
+
+      <input
+        ref={ref}
+        type="range"
+        min={0}
+        max={180}
+        step={1}
+        defaultValue={valueDeg}
+        disabled={readOnly}
+        className="hud-range-input w-full"
+      />
     </div>
   );
 }
@@ -252,6 +247,8 @@ export function ServoSliders({
   onCommit,
   readOnly = false,
   headerExtra,
+  panelCollapsed,
+  panelOnToggle,
 }: ServoSlidersProps) {
   const [collapsed, setCollapsed] = React.useState<Record<number, boolean>>({});
 
@@ -278,8 +275,15 @@ export function ServoSliders({
   const toggle = (gi: number) => setCollapsed((prev) => ({ ...prev, [gi]: !prev[gi] }));
 
   return (
-    <HudPanel title="Servo Control" status="online" cornerBrackets className="h-full">
-      <div className="flex h-full flex-col gap-3 overflow-auto p-3">
+    <HudPanel
+      title="Servo Control"
+      status="online"
+      cornerBrackets
+      className="h-full"
+      collapsed={panelCollapsed}
+      onToggle={panelOnToggle}
+    >
+      <div className="flex flex-col gap-3 overflow-auto p-3">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-0.5">
             <span

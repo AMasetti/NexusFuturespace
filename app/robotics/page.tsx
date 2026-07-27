@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useLayoutEffect, useEffect } from "react";
+import { useIsMobile } from "@/lib/use-is-mobile";
+import { MobileScrollLayout } from "@/components/hud/panels/MobileScrollLayout";
 
 import {
   HudBadge,
@@ -60,7 +62,7 @@ const PERIPHERALS = [
   { name: "PCA9685", bus: "I2C 0x40", hz: 50, color: "rgba(0,255,156,0.80)" },
 ] as const;
 
-function FreeRTOSPanel() {
+function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const cycleRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const counters = useRef<number[]>(RTOS_TASKS.map(() => 0));
 
@@ -76,8 +78,15 @@ function FreeRTOSPanel() {
   }, []);
 
   return (
-    <HudPanel title="FreeRTOS · ESP32-C3" status="online" cornerBrackets className="h-full">
-      <div className="flex h-full flex-col gap-2 overflow-auto p-3">
+    <HudPanel
+      title="FreeRTOS · ESP32-C3"
+      status="online"
+      cornerBrackets
+      className="h-full"
+      collapsed={collapsed}
+      onToggle={onToggle}
+    >
+      <div className="flex flex-col gap-2 overflow-auto p-3">
         {/* MCU header */}
         <div className="flex items-baseline justify-between">
           <span
@@ -246,7 +255,7 @@ function AxisBar({ value, max, color }: { value: number; max: number; color: str
   );
 }
 
-function ImuLivePanel() {
+function ImuLivePanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
   const status = useRosStatus();
   const orientation = useRosTopic<{ vector: ImuOrientation }>(
     "/optimus/imu/orientation",
@@ -277,8 +286,10 @@ function ImuLivePanel() {
       status={isLive ? "online" : "warning"}
       cornerBrackets
       className="h-full"
+      collapsed={collapsed}
+      onToggle={onToggle}
     >
-      <div className="flex h-full flex-col gap-2 overflow-auto p-3">
+      <div className="flex flex-col gap-2 overflow-auto p-3">
         {/* Pitch / Roll — large readout */}
         <div className="grid grid-cols-2 gap-2">
           {[
@@ -426,6 +437,8 @@ function PanelContent({
   robotConnected,
   onTakeControl,
   onReleaseControl,
+  collapsed,
+  onToggle,
 }: {
   id: PanelId;
   jointAngles: JointAngles;
@@ -435,6 +448,8 @@ function PanelContent({
   robotConnected: boolean;
   onTakeControl: () => void;
   onReleaseControl: () => void;
+  collapsed?: boolean;
+  onToggle?: () => void;
 }) {
   const rosStatus = useRosStatus();
 
@@ -535,7 +550,7 @@ function PanelContent({
       );
 
     case "system-metrics":
-      return <FreeRTOSPanel />;
+      return <FreeRTOSPanel collapsed={collapsed} onToggle={onToggle} />;
 
     case "mission-status":
       return (
@@ -577,17 +592,21 @@ function PanelContent({
       );
 
     case "imu-live":
-      return <ImuLivePanel />;
+      return <ImuLivePanel collapsed={collapsed} onToggle={onToggle} />;
 
     case "servo-control": {
       const isConnected = rosStatus === "connected";
       const isOverride = controlMode === "override";
+      // When not connected to ROS, sliders always drive the 3D viewer freely.
+      const canDrive = !isConnected || isOverride;
       return (
         <ServoSliders
           angles={jointAngles}
-          onChange={isOverride ? onJointAnglesChange : () => {}}
-          onCommit={isOverride ? onJointAnglesCommit : undefined}
+          onChange={canDrive ? onJointAnglesChange : () => {}}
+          onCommit={canDrive ? onJointAnglesCommit : undefined}
           readOnly={isConnected && !isOverride}
+          panelCollapsed={collapsed}
+          panelOnToggle={onToggle}
           headerExtra={
             isConnected ? (
               isOverride ? (
@@ -630,7 +649,7 @@ function PanelContent({
     }
 
     case "power-draw":
-      return <PowerConsumption angles={jointAngles} />;
+      return <PowerConsumption angles={jointAngles} collapsed={collapsed} onToggle={onToggle} />;
 
     default:
       return null;
@@ -914,6 +933,18 @@ export default function RoboticsPage() {
     savePanels(panels);
   }, [panels]);
 
+  const isMobile = useIsMobile();
+
+  const panelContentProps = {
+    jointAngles,
+    onJointAnglesChange: setJointAngles,
+    onJointAnglesCommit: setCommittedAngles,
+    controlMode,
+    robotConnected,
+    onTakeControl: handleTakeControl,
+    onReleaseControl: handleReleaseControl,
+  };
+
   return (
     <RosProvider>
       <RosJointSync
@@ -925,81 +956,140 @@ export default function RoboticsPage() {
         }}
         onRobotConnectedChange={setRobotConnected}
       />
-      <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
-        {/* ── TLS cert trust prompt ───────────────────────────────────── */}
-        <TrustCertBanner />
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
-          <div className="flex items-center gap-3">
-            <HudStatusDot status="online" size="md" pulse />
-            <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
-              Nexus Robotics
-            </span>
-            <HudBadge variant="info" label="PROTO-02" size="sm" />
-          </div>
-          <div className="flex items-center gap-4">
-            <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
-            <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
-            <div className="bg-hud-border h-4 w-px" />
-            <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
-            <div className="bg-hud-border h-4 w-px" />
-            <button
-              onClick={() => {
-                clearPersistedLayout();
-                setPanels(INITIAL_PANELS);
-              }}
-              className="border-hud-border/50 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-              style={{ border: "1px solid" }}
-            >
-              Reset Layout
-            </button>
-          </div>
-        </div>
 
-        {/* ── Canvas ─────────────────────────────────────────────────── */}
-        <div
-          ref={canvasRef}
-          className="relative min-h-0 flex-1 overflow-hidden select-none"
-          style={{
-            backgroundImage: "radial-gradient(circle, rgba(13,74,107,0.55) 1px, transparent 1px)",
-            backgroundSize: `${GRID}px ${GRID}px`,
-            backgroundPosition: bgPos,
-          }}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerLeave={onPointerUp}
-        >
-          {/* 3D robot viewer — full canvas, behind floating panels */}
-          <div style={{ position: "absolute", inset: 0, pointerEvents: "auto", zIndex: 0 }}>
+      {/* ── Mobile layout ───────────────────────────────────────────── */}
+      {isMobile === true && (
+        <MobileScrollLayout
+          viewer={
             <MujocoViewer
               jointAngles={jointAngles}
               initialCamera={initialCamera}
               onCameraChange={saveCamera}
+              compact
             />
+          }
+          panels={[
+            {
+              id: "imu-live",
+              defaultCollapsed: false,
+              content: (collapsed, onToggle) => (
+                <PanelContent
+                  id="imu-live"
+                  {...panelContentProps}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                />
+              ),
+            },
+            {
+              id: "servo-control",
+              defaultCollapsed: false,
+              content: (collapsed, onToggle) => (
+                <PanelContent
+                  id="servo-control"
+                  {...panelContentProps}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                />
+              ),
+            },
+            {
+              id: "system-metrics",
+              defaultCollapsed: true,
+              content: (collapsed, onToggle) => (
+                <PanelContent
+                  id="system-metrics"
+                  {...panelContentProps}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                />
+              ),
+            },
+            {
+              id: "power-draw",
+              defaultCollapsed: true,
+              content: (collapsed, onToggle) => (
+                <PanelContent
+                  id="power-draw"
+                  {...panelContentProps}
+                  collapsed={collapsed}
+                  onToggle={onToggle}
+                />
+              ),
+            },
+          ]}
+        />
+      )}
+
+      {/* ── Desktop layout (unchanged) ──────────────────────────────── */}
+      {isMobile !== true && (
+        <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
+          {/* ── TLS cert trust prompt ─────────────────────────────────── */}
+          <TrustCertBanner />
+          {/* ── Header ───────────────────────────────────────────────── */}
+          <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
+            <div className="flex items-center gap-3">
+              <HudStatusDot status="online" size="md" pulse />
+              <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
+                Nexus Robotics
+              </span>
+              <HudBadge variant="info" label="PROTO-02" size="sm" />
+            </div>
+            <div className="flex items-center gap-4">
+              <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
+              <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
+              <div className="bg-hud-border h-4 w-px" />
+              <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
+              <div className="bg-hud-border h-4 w-px" />
+              <button
+                onClick={() => {
+                  clearPersistedLayout();
+                  setPanels(INITIAL_PANELS);
+                }}
+                className="border-hud-border/50 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                style={{ border: "1px solid" }}
+              >
+                Reset Layout
+              </button>
+            </div>
           </div>
 
-          {panels.map((panel) => (
-            <FloatingPanel
-              key={panel.id}
-              panel={panel}
-              onDragStart={(e, id) => startInteraction(e, id, "drag")}
-              onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
-              onFocus={bringToFront}
-            >
-              <PanelContent
-                id={panel.id}
+          {/* ── Canvas ───────────────────────────────────────────────── */}
+          <div
+            ref={canvasRef}
+            className="relative min-h-0 flex-1 overflow-hidden select-none"
+            style={{
+              backgroundImage: "radial-gradient(circle, rgba(13,74,107,0.55) 1px, transparent 1px)",
+              backgroundSize: `${GRID}px ${GRID}px`,
+              backgroundPosition: bgPos,
+            }}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onPointerLeave={onPointerUp}
+          >
+            {/* 3D robot viewer — full canvas, behind floating panels */}
+            <div style={{ position: "absolute", inset: 0, pointerEvents: "auto", zIndex: 0 }}>
+              <MujocoViewer
                 jointAngles={jointAngles}
-                onJointAnglesChange={setJointAngles}
-                onJointAnglesCommit={setCommittedAngles}
-                controlMode={controlMode}
-                robotConnected={robotConnected}
-                onTakeControl={handleTakeControl}
-                onReleaseControl={handleReleaseControl}
+                initialCamera={initialCamera}
+                onCameraChange={saveCamera}
               />
-            </FloatingPanel>
-          ))}
+            </div>
+
+            {panels.map((panel) => (
+              <FloatingPanel
+                key={panel.id}
+                panel={panel}
+                onDragStart={(e, id) => startInteraction(e, id, "drag")}
+                onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
+                onFocus={bringToFront}
+              >
+                <PanelContent id={panel.id} {...panelContentProps} />
+              </FloatingPanel>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </RosProvider>
   );
 }

@@ -393,11 +393,13 @@ export function MujocoViewer({
   jointAngles,
   initialCamera = null,
   onCameraChange,
+  compact = false,
 }: {
   className?: string;
   jointAngles?: JointAngles;
   initialCamera?: CameraState | null;
   onCameraChange?: (state: CameraState) => void;
+  compact?: boolean;
 }) {
   const [autoRotate, setAutoRotate] = useState(false);
 
@@ -426,7 +428,9 @@ export function MujocoViewer({
         />
       </Canvas>
 
-      <SimInfoPanel autoRotate={autoRotate} onToggleRotate={() => setAutoRotate((r) => !r)} />
+      {!compact && (
+        <SimInfoPanel autoRotate={autoRotate} onToggleRotate={() => setAutoRotate((r) => !r)} />
+      )}
     </div>
   );
 }

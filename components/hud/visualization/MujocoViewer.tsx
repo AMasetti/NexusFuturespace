@@ -135,20 +135,21 @@ function URDFRobot({
       "Servo-Forearm-R": forearmR,
     } = angles;
 
-    // Actuated joints — set directly
+    // Actuated joints — signs match hardware convention verified 2026-08-11
     robot.setJointValue("Servo-Hip-L", hipL);
     robot.setJointValue("Servo-Hip-R", hipR);
-    robot.setJointValue("Servo-Knee-L-Top", kneeLTop);
-    robot.setJointValue("Servo-Knee-R-Top", kneeRTop);
-    robot.setJointValue("Servo-Knee-L-Bottom", kneeLBot);
+    robot.setJointValue("Servo-Knee-L-Top", -kneeLTop); // Hip Pitch L inverted in URDF
+    robot.setJointValue("Servo-Knee-R-Top", -kneeRTop); // Hip Pitch R inverted in URDF
+    robot.setJointValue("Servo-Knee-L-Bottom", -kneeLBot); // Knee Bend L inverted in URDF
     robot.setJointValue("Servo-Knee-R-Bottom", kneeRBot);
-    robot.setJointValue("Servo-Ankle-L", ankleL);
+    robot.setJointValue("Servo-Ankle-L", -ankleL); // Ankle Roll L inverted in URDF
     robot.setJointValue("Servo-Ankle-R", ankleR);
     robot.setJointValue("Servo-Showlder-L-Front-Back", shldrLFB);
-    robot.setJointValue("Servo-Showlder-R-Front-Back", shldrRFB);
-    robot.setJointValue("Servo-Showlder-L-Inward-Outward", shldrLLat);
-    robot.setJointValue("Servo-Showlder-R-Inward-Outward", shldrRLat);
-    robot.setJointValue("Servo-Forearm-L", forearmL);
+    robot.setJointValue("Servo-Showlder-R-Front-Back", -shldrRFB); // Shoulder FB R inverted in URDF
+    // Shoulder lat: URDF 0 = arms lateral, hardware 0 = T-pose → offset -π/2; L also inverted
+    robot.setJointValue("Servo-Showlder-L-Inward-Outward", -shldrLLat - Math.PI / 2);
+    robot.setJointValue("Servo-Showlder-R-Inward-Outward", shldrRLat - Math.PI / 2);
+    robot.setJointValue("Servo-Forearm-L", -forearmL); // Forearm Lat L inverted in URDF
     robot.setJointValue("Servo-Forearm-R", forearmR);
 
     // ── Left leg parallelogram ─────────────────────────────────────────────────

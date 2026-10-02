@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "type-check": "tsc --noEmit",
+    "check": "tsc --noEmit && eslint",
     "format": "prettier --write .",
     "prepare": "husky"
   },

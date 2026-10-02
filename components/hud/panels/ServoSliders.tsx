@@ -48,20 +48,12 @@ export const FIRMWARE_TO_JOINT: Record<string, keyof JointAngles> = {
 // URDF stores rad relative to mesh neutral, which differs for shoulder lat:
 //   mesh neutral = arms horizontal = 0 URDF rad; arms-down (halt) = −π/2 URDF rad.
 // So: urdf_rad = firmware_rad + FIRMWARE_TO_URDF_OFFSET[name]
-export const FIRMWARE_TO_URDF_OFFSET: Partial<Record<string, number>> = {
-  l_shoulder_lat: -Math.PI / 2,
-  r_shoulder_lat: -Math.PI / 2,
-};
+export const FIRMWARE_TO_URDF_OFFSET: Partial<Record<string, number>> = {};
 
 export const JOINT_TO_FIRMWARE = Object.fromEntries(
   Object.entries(FIRMWARE_TO_JOINT).map(([fw, ui]) => [ui, fw])
 ) as Partial<Record<keyof JointAngles, string>>;
 
-// All joints: display 0–180°, halt = 90° center, URDF rad = (displayDeg − 90) × D.
-// Shoulder lat URDF zero is arms-horizontal (T-pose mesh neutral).
-// Arms-down (halt) = −π/2 for L (axis +Z) and +π/2 for R (axis −Z).
-// So their DEFAULT is set to those values so display reads 90° at halt.
-const H = Math.PI / 2;
 export const DEFAULT_JOINT_ANGLES: JointAngles = {
   "Servo-Hip-L": 0,
   "Servo-Hip-R": 0,
@@ -73,8 +65,8 @@ export const DEFAULT_JOINT_ANGLES: JointAngles = {
   "Servo-Ankle-R": 0,
   "Servo-Showlder-L-Front-Back": 0,
   "Servo-Showlder-R-Front-Back": 0,
-  "Servo-Showlder-L-Inward-Outward": -H, // arms-down on +Z axis = −π/2
-  "Servo-Showlder-R-Inward-Outward": -H, // arms-down on −Z axis = also −π/2 (same physical rotation)
+  "Servo-Showlder-L-Inward-Outward": 0, // T-pose = servo center = 0 rad
+  "Servo-Showlder-R-Inward-Outward": 0, // T-pose = servo center = 0 rad
   "Servo-Forearm-L": 0,
   "Servo-Forearm-R": 0,
 };
@@ -119,13 +111,10 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
         label: "Shoulder FB L",
         sublabel: "ch 7 · shoulder_fb",
       },
-      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (axis+Z).
       {
         key: "Servo-Showlder-L-Inward-Outward",
         label: "Shoulder Lat L",
         sublabel: "ch 8 · shoulder_lat",
-        haltRad: -H,
-        scale: +1,
       },
       { key: "Servo-Forearm-L", label: "Forearm Lat L", sublabel: "ch 9 · forearm_lat" },
     ],
@@ -139,13 +128,10 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
         label: "Shoulder FB R",
         sublabel: "ch 4 · shoulder_fb",
       },
-      // Shoulder lat: URDF zero = arms horizontal. Arms-down (halt) = −π/2 (axis−Z, scale=−1).
       {
         key: "Servo-Showlder-R-Inward-Outward",
         label: "Shoulder Lat R",
         sublabel: "ch 5 · shoulder_lat",
-        haltRad: -H,
-        scale: -1,
       },
       { key: "Servo-Forearm-R", label: "Forearm Lat R", sublabel: "ch 6 · forearm_lat" },
     ],
@@ -205,6 +191,13 @@ function JointSlider({
     if (el && Number(el.value) !== valueDeg) el.value = String(valueDeg);
   }, [valueDeg]);
 
+  const step = (delta: number) => {
+    const next = Math.min(180, Math.max(0, valueDeg + delta));
+    onChange(next);
+    onCommit(next);
+    if (ref.current) ref.current.value = String(next);
+  };
+
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
@@ -219,12 +212,26 @@ function JointSlider({
             {sublabel}
           </span>
         </div>
-        <span
-          className="font-mono tabular-nums"
-          style={{ fontSize: 16, fontWeight: 700, color: "rgba(0,255,200,0.95)" }}
-        >
-          {valueDeg}°
-        </span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => step(-5)} disabled={readOnly} className="hud-step-btn">
+            −5°
+          </button>
+          <span
+            className="font-mono tabular-nums"
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              color: "rgba(0,255,200,0.95)",
+              minWidth: 46,
+              textAlign: "center",
+            }}
+          >
+            {valueDeg}°
+          </span>
+          <button onClick={() => step(+5)} disabled={readOnly} className="hud-step-btn">
+            +5°
+          </button>
+        </div>
       </div>
 
       <input

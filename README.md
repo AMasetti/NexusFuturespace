@@ -141,4 +141,6 @@ Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which 
 | `fix`, `perf`, `refactor`                 | patch | `fix(viewer): joint signs`     |
 | `chore`, `ci`, `docs`, `style`, `test`, … | none  | no release                     |
 
+The `commit-msg` hook ([`.husky/commit-msg`](.husky/commit-msg)) rejects any commit whose subject doesn't follow this format, so every commit counts toward the next version.
+
 The release ships `futurespace-ui-vX.Y.Z.tar.gz` — the standalone Next.js bundle. Extract it and run `node server.js` (port via `PORT`, default 3000).

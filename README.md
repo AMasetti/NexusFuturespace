@@ -89,11 +89,10 @@ When `NEXT_PUBLIC_ROS_WS_URL` is unset or rosbridge is unreachable, the UI falls
 
 ## Routes
 
-| Route        | Purpose                                                                           |
-| ------------ | --------------------------------------------------------------------------------- |
-| `/robotics`  | Main HUD canvas — draggable/resizable floating panels with live 3D Optimus viewer |
-| `/showcase`  | Full component showcase — every HUD widget rendered for visual reference          |
-| `/dashboard` | Alternate dashboard layout                                                        |
+| Route       | Purpose                                                                           |
+| ----------- | --------------------------------------------------------------------------------- |
+| `/robotics` | Main HUD canvas — draggable/resizable floating panels with live 3D Optimus viewer |
+| `/showcase` | Full component showcase — every HUD widget rendered for visual reference          |
 
 ## Project structure
 

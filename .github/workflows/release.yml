@@ -1,0 +1,89 @@
+name: Release
+
+# On every push to main: work out the next semver from the Conventional Commits
+# since the last tag (.github/scripts/next-version.sh), build the standalone
+# Next.js bundle and publish it as a GitHub release. No release-worthy commits
+# (only chore/ci/docs/…) → nothing is published.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  version:
+    name: Determine version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.next.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Next version from commits
+        id: next
+        run: |
+          tag=$(NOTES_FILE=release-notes.md .github/scripts/next-version.sh)
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if [ -n "$tag" ]; then echo "Next release: $tag"; else echo "No feat/fix/breaking commits since the last release — skipping."; fi
+
+      - uses: actions/upload-artifact@v4
+        if: steps.next.outputs.tag != ''
+        with:
+          name: release-notes
+          path: release-notes.md
+
+  release:
+    name: Build & publish ${{ needs.version.outputs.tag }}
+    needs: version
+    if: needs.version.outputs.tag != ''
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - run: npm ci
+
+      # Stamp the release version into the bundle; not committed back.
+      - run: npm version "${TAG#v}" --no-git-tag-version --allow-same-version
+
+      - run: npm run check
+
+      - run: npm run build
+
+      # Same layout as docker/futurespace-ui/Dockerfile: run with `node server.js`.
+      - name: Package standalone bundle
+        run: |
+          dir="futurespace-ui-$TAG"
+          mkdir -p "$dir/.next"
+          cp -r .next/standalone/. "$dir/"
+          cp -r .next/static "$dir/.next/static"
+          cp -r public "$dir/public"
+          tar -czf "$dir.tar.gz" "$dir"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$TAG" "futurespace-ui-$TAG.tar.gz" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --notes-file release-notes.md

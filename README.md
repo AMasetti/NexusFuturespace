@@ -129,3 +129,16 @@ Panel positions, camera state, and joint angles persist to `localStorage`. **Res
 ## TLS
 
 rosbridge runs with a self-signed TLS cert generated on first container boot (`/etc/rosbridge-tls/`). On first use, visit `https://localhost:9090` in your browser, accept the cert, then reload the UI. You only need to do this once per browser profile.
+
+## Releases
+
+Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which picks the next version from the [Conventional Commits](https://www.conventionalcommits.org/) since the last `vX.Y.Z` tag:
+
+| Commit                                    | Bump  | Example                        |
+| ----------------------------------------- | ----- | ------------------------------ |
+| `type!:` or a `BREAKING CHANGE:` footer   | major | `refactor!: drop roslib`       |
+| `feat`                                    | minor | `feat(sliders): ±step buttons` |
+| `fix`, `perf`, `refactor`                 | patch | `fix(viewer): joint signs`     |
+| `chore`, `ci`, `docs`, `style`, `test`, … | none  | no release                     |
+
+The release ships `futurespace-ui-vX.Y.Z.tar.gz` — the standalone Next.js bundle. Extract it and run `node server.js` (port via `PORT`, default 3000).

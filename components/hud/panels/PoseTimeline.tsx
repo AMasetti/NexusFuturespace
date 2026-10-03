@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CopyPlus, Download, Play, Plus, Repeat, Square, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -62,6 +62,33 @@ function DurationInput({
   );
 }
 
+/** Inline name field: Enter or blur saves, Escape cancels. */
+function PoseNameInput({
+  initial,
+  onDone,
+}: {
+  initial: string;
+  onDone: (name: string | null) => void;
+}) {
+  const [draft, setDraft] = useState(initial);
+  return (
+    <input
+      autoFocus
+      value={draft}
+      maxLength={32}
+      aria-label="Pose name"
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={() => onDone(draft.trim() || null)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Escape") onDone(null);
+      }}
+      className="w-28 rounded-md bg-black/30 px-1 font-mono text-[11px] font-bold tracking-widest text-white uppercase ring-1 ring-cyan-300/50 outline-none"
+    />
+  );
+}
+
 /**
  * Pose sequence editor under the 3D viewer: pose cards with the transition time
  * between them, + to add a pose, play once or in a loop, export/import JSON.
@@ -93,10 +120,56 @@ export function PoseTimeline({
   message?: string | null;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [renaming, setRenaming] = useState<string | null>(null);
+
+  // A vertical mouse wheel scrolls the track sideways. Native listener: React's
+  // wheel handler is passive, so it couldn't stop the page from scrolling instead.
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
+  // Adding a pose scrolls to the end (new pose and + both visible); selecting
+  // one scrolls just enough to show it.
+  const count = sequence.poses.length;
+  const prevCount = useRef(count);
+  const selectedId = sequence.poses[selected]?.id;
+  useEffect(() => {
+    const added = count > prevCount.current;
+    prevCount.current = count;
+    // Wait a frame: the new card's width isn't in scrollWidth until layout runs.
+    const raf = requestAnimationFrame(() => {
+      const el = trackRef.current;
+      if (!el) return;
+      if (added) el.scrollTo({ left: el.scrollWidth, behavior: "smooth" });
+      else if (selectedId)
+        cardRefs.current[selectedId]?.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "smooth",
+        });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [selectedId, count]);
   const { poses } = sequence;
   const total = totalDuration(sequence);
   const times = poseTimes(sequence);
   const canPlay = poses.length > 1;
+
+  const renamePose = (i: number, name: string | null) => {
+    setRenaming(null);
+    if (name && name !== poses[i].name)
+      onChange({ ...sequence, poses: poses.map((p, k) => (k === i ? { ...p, name } : p)) });
+  };
 
   const setDuration = (i: number, d: number) =>
     onChange({ ...sequence, poses: poses.map((p, k) => (k === i ? { ...p, durationS: d } : p)) });
@@ -192,7 +265,7 @@ export function PoseTimeline({
       </div>
 
       {/* ── Track ────────────────────────────────────────────── */}
-      <div className="glass-scroll flex items-center gap-2 overflow-x-auto pb-1">
+      <div ref={trackRef} className="glass-scroll flex items-center gap-2 overflow-x-auto pb-1">
         {poses.map((p, i) => {
           const isSelected = i === selected && !playing;
           return (
@@ -206,6 +279,9 @@ export function PoseTimeline({
                 />
               )}
               <div
+                ref={(el) => {
+                  cardRefs.current[p.id] = el;
+                }}
                 className={cn(
                   "group relative flex items-center rounded-2xl border transition-colors",
                   isSelected
@@ -213,19 +289,30 @@ export function PoseTimeline({
                     : "border-white/10 bg-white/5 hover:bg-white/10"
                 )}
               >
-                <button
-                  onClick={() => onSelect(i)}
-                  disabled={playing}
-                  aria-pressed={isSelected}
-                  className="flex flex-col items-start gap-0.5 px-3 py-2 text-left disabled:cursor-default"
-                >
-                  <span className="font-mono text-[11px] font-bold tracking-widest text-white/90 uppercase">
-                    {p.name}
-                  </span>
-                  <span className={cn(MONO, "text-[10px] text-cyan-200/60")}>
-                    {i === 0 ? "start" : `t = ${times[i].toFixed(2)} s`}
-                  </span>
-                </button>
+                {renaming === p.id ? (
+                  <div className="flex flex-col items-start gap-0.5 px-3 py-2">
+                    <PoseNameInput initial={p.name} onDone={(name) => renamePose(i, name)} />
+                    <span className={cn(MONO, "text-[10px] text-cyan-200/60")}>
+                      {i === 0 ? "start" : `t = ${times[i].toFixed(2)} s`}
+                    </span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => onSelect(i)}
+                    onDoubleClick={() => !playing && setRenaming(p.id)}
+                    disabled={playing}
+                    aria-pressed={isSelected}
+                    title="Click to edit this pose · double-click to rename"
+                    className="flex flex-col items-start gap-0.5 px-3 py-2 text-left disabled:cursor-default"
+                  >
+                    <span className="font-mono text-[11px] font-bold tracking-widest text-white/90 uppercase">
+                      {p.name}
+                    </span>
+                    <span className={cn(MONO, "text-[10px] text-cyan-200/60")}>
+                      {i === 0 ? "start" : `t = ${times[i].toFixed(2)} s`}
+                    </span>
+                  </button>
+                )}
                 {!playing && (
                   <div className="mr-1.5 flex flex-col opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                     <button

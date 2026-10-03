@@ -4,7 +4,9 @@ import React, { useRef, useEffect } from "react";
 import { HudPanel } from "../core/HudPanel";
 import { HudSeparator } from "../core/HudSeparator";
 
-export interface JointAngles {
+// A type (not an interface) so it is assignable to Record<string, number>,
+// which the robot-agnostic 3D viewer takes.
+export type JointAngles = {
   "Servo-Hip-L": number;
   "Servo-Hip-R": number;
   "Servo-Knee-L-Top": number;
@@ -19,7 +21,7 @@ export interface JointAngles {
   "Servo-Showlder-R-Inward-Outward": number;
   "Servo-Forearm-L": number;
   "Servo-Forearm-R": number;
-}
+};
 
 const D = Math.PI / 180;
 
@@ -156,13 +158,15 @@ interface ServoSlidersProps {
   panelOnToggle?: () => void;
 }
 
-function JointSlider({
+export function JointSlider({
   label,
   sublabel,
   valueDeg,
   onChange,
   onCommit,
   readOnly = false,
+  min = 0,
+  max = 180,
 }: {
   label: string;
   sublabel: string;
@@ -170,6 +174,9 @@ function JointSlider({
   onChange: (deg: number) => void;
   onCommit: (deg: number) => void;
   readOnly?: boolean;
+  /** Slider range in displayed degrees (Optimus: 0–180 around a 90° halt). */
+  min?: number;
+  max?: number;
 }) {
   const ref = useRef<HTMLInputElement>(null);
 
@@ -197,7 +204,7 @@ function JointSlider({
   }, [valueDeg]);
 
   const step = (delta: number) => {
-    const next = Math.min(180, Math.max(0, valueDeg + delta));
+    const next = Math.min(max, Math.max(min, valueDeg + delta));
     onChange(next);
     onCommit(next);
     if (ref.current) ref.current.value = String(next);
@@ -242,8 +249,8 @@ function JointSlider({
       <input
         ref={ref}
         type="range"
-        min={0}
-        max={180}
+        min={min}
+        max={max}
         step={1}
         defaultValue={valueDeg}
         disabled={readOnly}

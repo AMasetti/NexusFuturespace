@@ -147,6 +147,25 @@ export function saveSidebarOpen(side: string, open: boolean): void {
   }
 }
 
+const KEY_ROBOT = "robotics:robot:v1";
+
+export function loadRobot<T extends string>(allowed: readonly T[]): T | null {
+  try {
+    const raw = localStorage.getItem(KEY_ROBOT);
+    return allowed.includes(raw as T) ? (raw as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveRobot(robot: string): void {
+  try {
+    localStorage.setItem(KEY_ROBOT, robot);
+  } catch {
+    /* quota exceeded — ignore */
+  }
+}
+
 export function clearPersistedLayout(): void {
   try {
     localStorage.removeItem(KEY_PANELS);

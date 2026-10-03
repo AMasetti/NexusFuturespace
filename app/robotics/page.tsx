@@ -15,7 +15,10 @@ import {
   MujocoInfoPanel,
 } from "@/components/hud";
 import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSidebar";
-import { PanelLeft, PanelRight } from "lucide-react";
+import { Check, ChevronDown, PanelLeft, PanelRight } from "lucide-react";
+import { SpotServoSliders } from "@/components/hud/panels/SpotServoSliders";
+import { DEFAULT_SPOT_ANGLES, type SpotAngles } from "@/lib/spotmicro";
+import type { RobotModelId } from "@/components/hud/visualization/MujocoViewer";
 import {
   ServoSliders,
   DEFAULT_JOINT_ANGLES,
@@ -36,6 +39,8 @@ import {
   saveJoints,
   loadSidebarOpen,
   saveSidebarOpen,
+  loadRobot,
+  saveRobot,
   type CameraState,
 } from "@/lib/persist";
 
@@ -654,6 +659,96 @@ function SidebarToggle({
   );
 }
 
+// ─── Robot picker (header) ────────────────────────────────────────────────────
+
+const ROBOTS: { id: RobotModelId; name: string; detail: string }[] = [
+  { id: "optimus", name: "Optimus", detail: "Biped · 14 servos · live robot link" },
+  { id: "spotmicro", name: "Spot Micro", detail: "Quadruped · 12 servos · simulation" },
+];
+
+function RobotPicker({
+  value,
+  onChange,
+}: {
+  value: RobotModelId;
+  onChange: (id: RobotModelId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const current = ROBOTS.find((r) => r.id === value) ?? ROBOTS[0];
+
+  // Close on outside click or Escape.
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Select robot"
+        className="text-hud-text-bright flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 font-mono text-xs tracking-widest uppercase transition-colors hover:bg-white/10"
+      >
+        {current.name}
+        <ChevronDown
+          className="h-3.5 w-3.5 transition-transform"
+          style={{ transform: open ? "rotate(180deg)" : undefined }}
+        />
+      </button>
+
+      {open && (
+        <ul
+          role="listbox"
+          aria-label="Robot"
+          className="glass-panel absolute top-full left-0 z-50 mt-2 flex w-72 flex-col gap-1 rounded-2xl p-1.5"
+        >
+          {ROBOTS.map((r) => {
+            const active = r.id === value;
+            return (
+              <li key={r.id}>
+                <button
+                  role="option"
+                  aria-selected={active}
+                  onClick={() => {
+                    onChange(r.id);
+                    setOpen(false);
+                  }}
+                  className={
+                    "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors " +
+                    (active ? "bg-white/10" : "hover:bg-white/5")
+                  }
+                >
+                  <div className="flex flex-1 flex-col gap-0.5">
+                    <span className="text-hud-text-bright font-mono text-xs font-bold tracking-widest uppercase">
+                      {r.name}
+                    </span>
+                    <span className="text-hud-text font-mono text-[10px]">{r.detail}</span>
+                  </div>
+                  {active && <Check className="text-hud-primary h-4 w-4" />}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ─── Draggable 3D viewer ──────────────────────────────────────────────────────
 
 /**
@@ -993,6 +1088,12 @@ export default function RoboticsPage() {
   };
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [robot, setRobot] = useState<RobotModelId>("optimus");
+  const [spotAngles, setSpotAngles] = useState<SpotAngles>(DEFAULT_SPOT_ANGLES);
+  const selectRobot = (id: RobotModelId) => {
+    saveRobot(id);
+    setRobot(id);
+  };
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const toggleLeft = () => {
@@ -1011,6 +1112,7 @@ export default function RoboticsPage() {
     setInitialCamera(loadCamera());
     const savedJoints = loadJoints();
     if (savedJoints) setJointAngles(savedJoints);
+    setRobot(loadRobot(["optimus", "spotmicro"] as const) ?? "optimus");
     setLeftOpen(loadSidebarOpen("left") ?? true);
     setRightOpen(loadSidebarOpen("right") ?? true);
   }, []);
@@ -1066,6 +1168,22 @@ export default function RoboticsPage() {
     panelSection("system-metrics"),
     panelSection("servo-control"),
   ];
+
+  // Spot Micro has no live link or Optimus hardware panels: just its servos.
+  const spotSections: GlassSection[] = [
+    {
+      id: "spot-servo-control",
+      content: (collapsed, onToggle) => (
+        <SpotServoSliders
+          angles={spotAngles}
+          onChange={setSpotAngles}
+          collapsed={collapsed}
+          onToggle={onToggle}
+        />
+      ),
+    },
+  ];
+  const isOptimus = robot === "optimus";
 
   const robotHost = process.env.NEXT_PUBLIC_ROBOT_HOST ?? "optimus.local";
 
@@ -1158,34 +1276,51 @@ export default function RoboticsPage() {
             {/* ── TLS cert trust prompt ─────────────────────────────────── */}
             <TrustCertBanner />
             {/* ── Header ───────────────────────────────────────────────── */}
-            <header className="glass-panel flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
+            {/* z-30: keeps the robot menu above the sidebars, which stack later */}
+            <header className="glass-panel relative z-30 flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
               <div className="flex items-center gap-3">
-                <SidebarToggle side="left" open={leftOpen} onClick={toggleLeft} />
+                {isOptimus && <SidebarToggle side="left" open={leftOpen} onClick={toggleLeft} />}
                 <HudStatusDot status="online" size="md" pulse />
                 <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
                   Nexus Robotics
                 </span>
                 <HudBadge variant="info" label="PROTO-02" size="sm" />
+                <RobotPicker value={robot} onChange={selectRobot} />
               </div>
               <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
             </header>
 
             <div className="flex min-h-0 flex-1 gap-3">
-              <GlassSidebar side="left" open={leftOpen} sections={leftSections} />
+              {isOptimus && <GlassSidebar side="left" open={leftOpen} sections={leftSections} />}
 
               <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
-                <DraggableViewer
-                  jointAngles={jointAngles}
-                  onJointAnglesChange={setJointAngles}
-                  onJointAnglesCommit={setCommittedAngles}
-                  controlMode={controlMode}
-                  robotConnected={robotConnected}
-                  autoRotate={autoRotate}
-                  initialCamera={initialCamera}
-                />
+                {isOptimus ? (
+                  <DraggableViewer
+                    key="optimus"
+                    jointAngles={jointAngles}
+                    onJointAnglesChange={setJointAngles}
+                    onJointAnglesCommit={setCommittedAngles}
+                    controlMode={controlMode}
+                    robotConnected={robotConnected}
+                    autoRotate={autoRotate}
+                    initialCamera={initialCamera}
+                  />
+                ) : (
+                  <MujocoViewer
+                    key="spotmicro"
+                    robot="spotmicro"
+                    compact
+                    jointAngles={spotAngles}
+                    onJointDrag={(key, rad) => setSpotAngles((a) => ({ ...a, [key]: rad }))}
+                  />
+                )}
               </main>
 
-              <GlassSidebar side="right" open={rightOpen} sections={rightSections} />
+              <GlassSidebar
+                side="right"
+                open={rightOpen}
+                sections={isOptimus ? rightSections : spotSections}
+              />
             </div>
           </div>
         )}

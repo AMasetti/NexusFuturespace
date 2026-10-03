@@ -7,6 +7,7 @@ import * as THREE from "three";
 import URDFLoader, { type URDFRobot as URDFRobotType } from "urdf-loader";
 import { STLLoader, OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { JOINT_LABELS, type JointAngles } from "@/components/hud/panels/ServoSliders";
+import { SPOT_JOINTS } from "@/lib/spotmicro";
 import type { CameraState } from "@/lib/persist";
 import { HudPanel } from "@/components/hud/core/HudPanel";
 
@@ -73,12 +74,9 @@ const DRAG_JOINT: Partial<Record<keyof JointAngles, { joint: string; sign: numbe
   "Servo-Forearm-L": { joint: "Servo-Forearm-L", sign: -1 },
 };
 
-// Same travel as the sliders: 0–180° display = ±90° around halt.
-const JOINT_LIMIT = H;
-
 export interface JointDragHandlers {
-  onDrag: (key: keyof JointAngles, rad: number, clientX: number, clientY: number) => void;
-  onEnd: (key: keyof JointAngles, rad: number) => void;
+  onDrag: (key: string, rad: number, clientX: number, clientY: number) => void;
+  onEnd: (key: string, rad: number) => void;
 }
 
 type URDFNode = THREE.Object3D & { isURDFLink?: boolean; isURDFJoint?: boolean };
@@ -99,16 +97,136 @@ function highlightLink(link: URDFNode, on: boolean) {
   }
 }
 
+// ─── Robot models ─────────────────────────────────────────────────────────────
+// Everything robot-specific lives here; loading, highlighting and drag-to-turn
+// below work the same for any model.
+
+type Angles = Record<string, number>;
+
+export type RobotModelId = "optimus" | "spotmicro";
+
+interface RobotModelDef {
+  urdf: string;
+  /** Writes UI angles into the URDF joints (every frame). */
+  apply: (robot: URDFRobotType, angles: Angles) => void;
+  /** Servo key that turns a grabbed link, if any. */
+  jointForLink: (link: URDFNode) => string | undefined;
+  /** URDF joint that visibly turns, and its sign vs the UI value. */
+  pivot: (key: string) => { joint: string; sign: number };
+  limits: (key: string) => readonly [number, number];
+  label: (key: string) => string;
+  /** Angle as the sliders show it. */
+  displayDeg: (key: string, rad: number) => number;
+}
+
+function applyOptimus(robot: URDFRobotType, angles: Angles) {
+  const {
+    "Servo-Hip-L": hipL,
+    "Servo-Hip-R": hipR,
+    "Servo-Knee-L-Top": kneeLTop,
+    "Servo-Knee-R-Top": kneeRTop,
+    "Servo-Knee-L-Bottom": kneeLBot,
+    "Servo-Knee-R-Bottom": kneeRBot,
+    "Servo-Ankle-L": ankleL,
+    "Servo-Ankle-R": ankleR,
+    "Servo-Showlder-L-Front-Back": shldrLFB,
+    "Servo-Showlder-R-Front-Back": shldrRFB,
+    "Servo-Showlder-L-Inward-Outward": shldrLLat,
+    "Servo-Showlder-R-Inward-Outward": shldrRLat,
+    "Servo-Forearm-L": forearmL,
+    "Servo-Forearm-R": forearmR,
+  } = angles as JointAngles;
+
+  // Actuated joints — signs match hardware convention verified 2026-08-11
+  robot.setJointValue("Servo-Hip-L", hipL);
+  robot.setJointValue("Servo-Hip-R", hipR);
+  robot.setJointValue("Servo-Ankle-L", -ankleL); // Ankle Roll L inverted in URDF
+  robot.setJointValue("Servo-Ankle-R", ankleR);
+  robot.setJointValue("Servo-Showlder-L-Front-Back", shldrLFB);
+  robot.setJointValue("Servo-Showlder-R-Front-Back", -shldrRFB); // Shoulder FB R inverted in URDF
+  // Shoulder lat: URDF 0 = arms lateral, hardware 0 = T-pose → offset -π/2; L also inverted
+  robot.setJointValue("Servo-Showlder-L-Inward-Outward", -shldrLLat - Math.PI / 2);
+  robot.setJointValue("Servo-Showlder-R-Inward-Outward", shldrRLat - Math.PI / 2);
+  robot.setJointValue("Servo-Forearm-L", -forearmL); // Forearm Lat L inverted in URDF
+  robot.setJointValue("Servo-Forearm-R", forearmR);
+
+  // ── Leg parallelograms ──────────────────────────────────────────────────────
+  // Each leg has two 4-bar linkages: thigh (Hip → Knee) and shin (Knee → Anckle).
+  // Both bars of a linkage turn by the same angle and the link they carry keeps
+  // its orientation. The URDF chains each one as bar → coupler, so the joint
+  // after the bar must undo the bar's turn. With the URDF axes (all parallel,
+  // same direction inside each linkage) that gives:
+  //   thigh: Unactuated-Knee-*-Top = Unactuated-Tendon-*-Top = θ, Servo-Knee-*-Top = −θ
+  //   shin:  Servo-Knee-*-Bottom = φ, Unactuated-Knee-*-Bottom = −φ, Unactuated-Tendon-*-Bottom = φ
+  // θ/φ keep the bar directions verified against the hardware (L shin inverted).
+  const thighL = -kneeLTop;
+  const thighR = -kneeRTop;
+  const shinL = -kneeLBot;
+  const shinR = kneeRBot;
+  robot.setJointValue("Unactuated-Knee-L-Top", thighL);
+  robot.setJointValue("Unactuated-Tendon-L-Top", thighL);
+  robot.setJointValue("Servo-Knee-L-Top", -thighL);
+  robot.setJointValue("Unactuated-Knee-R-Top", thighR);
+  robot.setJointValue("Unactuated-Tendon-R-Top", thighR);
+  robot.setJointValue("Servo-Knee-R-Top", -thighR);
+  robot.setJointValue("Servo-Knee-L-Bottom", shinL);
+  robot.setJointValue("Unactuated-Knee-L-Bottom", -shinL);
+  robot.setJointValue("Unactuated-Tendon-L-Bottom", shinL);
+  robot.setJointValue("Servo-Knee-R-Bottom", shinR);
+  robot.setJointValue("Unactuated-Knee-R-Bottom", -shinR);
+  robot.setJointValue("Unactuated-Tendon-R-Bottom", shinR);
+}
+
+const OPTIMUS: RobotModelDef = {
+  urdf: "/models/optimus/Assembly.urdf",
+  apply: applyOptimus,
+  jointForLink: (link) => LINK_TO_JOINT[link.name],
+  pivot: (key) => DRAG_JOINT[key as keyof JointAngles] ?? { joint: key, sign: 1 },
+  // Same travel as the sliders: 0–180° display = ±90° around halt.
+  limits: () => [-H, H],
+  label: (key) => JOINT_LABELS[key as keyof JointAngles] ?? key,
+  displayDeg: (_key, rad) => Math.round(90 + (rad * 180) / PI),
+};
+
+// Spot Micro: plain serial legs, so a grabbed link is turned by the nearest
+// non-fixed joint above it (covers and toes hang off fixed joints).
+const SPOTMICRO: RobotModelDef = {
+  urdf: "/models/spotmicro/spotmicroai.urdf",
+  apply: (robot, angles) => {
+    for (const [key, value] of Object.entries(angles))
+      if (SPOT_JOINTS[key]) robot.setJointValue(key, value);
+  },
+  jointForLink: (link) => {
+    let o = link.parent as (URDFNode & { jointType?: string }) | null;
+    while (o) {
+      if (o.isURDFJoint && o.jointType !== "fixed") return SPOT_JOINTS[o.name] ? o.name : undefined;
+      o = o.parent as (URDFNode & { jointType?: string }) | null;
+    }
+    return undefined;
+  },
+  pivot: (key) => ({ joint: key, sign: 1 }),
+  limits: (key) => SPOT_JOINTS[key]?.limits ?? [-H, H],
+  label: (key) => SPOT_JOINTS[key]?.label ?? key,
+  displayDeg: (_key, rad) => Math.round((rad * 180) / PI),
+};
+
+export const ROBOT_MODELS: Record<RobotModelId, RobotModelDef> = {
+  optimus: OPTIMUS,
+  spotmicro: SPOTMICRO,
+};
+
 // ─── URDF robot ───────────────────────────────────────────────────────────────
 
 function URDFRobot({
+  model,
   controlsRef,
   anglesRef,
   initialCamera,
   dragRef,
 }: {
+  model: RobotModelDef;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
-  anglesRef: React.RefObject<JointAngles | undefined>;
+  anglesRef: React.RefObject<Angles | undefined>;
   initialCamera: CameraState | null;
   dragRef: React.RefObject<JointDragHandlers | null>;
 }) {
@@ -138,7 +256,7 @@ function URDFRobot({
   const draggableLink = (obj: THREE.Object3D) => {
     if (!dragRef.current) return null;
     const link = linkOf(obj);
-    return link && LINK_TO_JOINT[link.name] ? link : null;
+    return link && model.jointForLink(link) ? link : null;
   };
 
   const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
@@ -154,8 +272,8 @@ function URDFRobot({
   const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
     const robot = robotRef.current;
     const link = e.button === 0 ? draggableLink(e.object) : null;
-    const key = link ? LINK_TO_JOINT[link.name] : undefined;
-    const pivotJoint = key ? (DRAG_JOINT[key] ?? { joint: key, sign: 1 }) : undefined;
+    const key = link ? model.jointForLink(link) : undefined;
+    const pivotJoint = key ? model.pivot(key) : undefined;
     const joint = pivotJoint && robot?.joints[pivotJoint.joint];
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!link || !key || !joint || !rect) return;
@@ -186,7 +304,8 @@ function URDFRobot({
       if (d < -PI) d += 2 * PI;
       last = a;
       // Screen y points down, so a growing atan2 is clockwise: negate for CCW.
-      value = THREE.MathUtils.clamp(value - d * sign, -JOINT_LIMIT, JOINT_LIMIT);
+      const [lo, hi] = model.limits(key);
+      value = THREE.MathUtils.clamp(value - d * sign, lo, hi);
       dragRef.current?.onDrag(key, value, ev.clientX, ev.clientY);
     };
     const up = () => {
@@ -258,7 +377,7 @@ function URDFRobot({
       }
     };
 
-    loader.load("/models/optimus/Assembly.urdf", (robot) => {
+    loader.load(model.urdf, (robot) => {
       robot.rotation.x = -H;
       robotRef.current = robot;
       group.add(robot);
@@ -267,7 +386,7 @@ function URDFRobot({
     return () => {
       while (group.children.length) group.remove(group.children[0]);
     };
-  }, [controlsRef, camera, initialCamera]);
+  }, [controlsRef, camera, initialCamera, model.urdf]);
 
   useFrame(({ clock }) => {
     // Idle bob
@@ -276,63 +395,7 @@ function URDFRobot({
 
     const robot = robotRef.current;
     const angles = anglesRef.current;
-    if (!robot || !angles) return;
-
-    const {
-      "Servo-Hip-L": hipL,
-      "Servo-Hip-R": hipR,
-      "Servo-Knee-L-Top": kneeLTop,
-      "Servo-Knee-R-Top": kneeRTop,
-      "Servo-Knee-L-Bottom": kneeLBot,
-      "Servo-Knee-R-Bottom": kneeRBot,
-      "Servo-Ankle-L": ankleL,
-      "Servo-Ankle-R": ankleR,
-      "Servo-Showlder-L-Front-Back": shldrLFB,
-      "Servo-Showlder-R-Front-Back": shldrRFB,
-      "Servo-Showlder-L-Inward-Outward": shldrLLat,
-      "Servo-Showlder-R-Inward-Outward": shldrRLat,
-      "Servo-Forearm-L": forearmL,
-      "Servo-Forearm-R": forearmR,
-    } = angles;
-
-    // Actuated joints — signs match hardware convention verified 2026-08-11
-    robot.setJointValue("Servo-Hip-L", hipL);
-    robot.setJointValue("Servo-Hip-R", hipR);
-    robot.setJointValue("Servo-Ankle-L", -ankleL); // Ankle Roll L inverted in URDF
-    robot.setJointValue("Servo-Ankle-R", ankleR);
-    robot.setJointValue("Servo-Showlder-L-Front-Back", shldrLFB);
-    robot.setJointValue("Servo-Showlder-R-Front-Back", -shldrRFB); // Shoulder FB R inverted in URDF
-    // Shoulder lat: URDF 0 = arms lateral, hardware 0 = T-pose → offset -π/2; L also inverted
-    robot.setJointValue("Servo-Showlder-L-Inward-Outward", -shldrLLat - Math.PI / 2);
-    robot.setJointValue("Servo-Showlder-R-Inward-Outward", shldrRLat - Math.PI / 2);
-    robot.setJointValue("Servo-Forearm-L", -forearmL); // Forearm Lat L inverted in URDF
-    robot.setJointValue("Servo-Forearm-R", forearmR);
-
-    // ── Leg parallelograms ──────────────────────────────────────────────────────
-    // Each leg has two 4-bar linkages: thigh (Hip → Knee) and shin (Knee → Anckle).
-    // Both bars of a linkage turn by the same angle and the link they carry keeps
-    // its orientation. The URDF chains each one as bar → coupler, so the joint
-    // after the bar must undo the bar's turn. With the URDF axes (all parallel,
-    // same direction inside each linkage) that gives:
-    //   thigh: Unactuated-Knee-*-Top = Unactuated-Tendon-*-Top = θ, Servo-Knee-*-Top = −θ
-    //   shin:  Servo-Knee-*-Bottom = φ, Unactuated-Knee-*-Bottom = −φ, Unactuated-Tendon-*-Bottom = φ
-    // θ/φ keep the bar directions verified against the hardware (L shin inverted).
-    const thighL = -kneeLTop;
-    const thighR = -kneeRTop;
-    const shinL = -kneeLBot;
-    const shinR = kneeRBot;
-    robot.setJointValue("Unactuated-Knee-L-Top", thighL);
-    robot.setJointValue("Unactuated-Tendon-L-Top", thighL);
-    robot.setJointValue("Servo-Knee-L-Top", -thighL);
-    robot.setJointValue("Unactuated-Knee-R-Top", thighR);
-    robot.setJointValue("Unactuated-Tendon-R-Top", thighR);
-    robot.setJointValue("Servo-Knee-R-Top", -thighR);
-    robot.setJointValue("Servo-Knee-L-Bottom", shinL);
-    robot.setJointValue("Unactuated-Knee-L-Bottom", -shinL);
-    robot.setJointValue("Unactuated-Tendon-L-Bottom", shinL);
-    robot.setJointValue("Servo-Knee-R-Bottom", shinR);
-    robot.setJointValue("Unactuated-Knee-R-Bottom", -shinR);
-    robot.setJointValue("Unactuated-Tendon-R-Bottom", shinR);
+    if (robot && angles) model.apply(robot, angles);
   });
 
   return (
@@ -350,14 +413,16 @@ function URDFRobot({
 // ─── Scene ────────────────────────────────────────────────────────────────────
 
 function Scene({
+  model,
   autoRotate,
   anglesRef,
   initialCamera,
   onCameraChange,
   dragRef,
 }: {
+  model: RobotModelDef;
   autoRotate: boolean;
-  anglesRef: React.RefObject<JointAngles | undefined>;
+  anglesRef: React.RefObject<Angles | undefined>;
   initialCamera: CameraState | null;
   onCameraChange: (state: CameraState) => void;
   dragRef: React.RefObject<JointDragHandlers | null>;
@@ -414,6 +479,7 @@ function Scene({
       />
 
       <URDFRobot
+        model={model}
         controlsRef={controlsRef}
         anglesRef={anglesRef}
         initialCamera={initialCamera}
@@ -637,18 +703,21 @@ export function MujocoViewer({
   autoRotate: autoRotateProp,
   onJointDrag,
   onJointDragEnd,
+  robot = "optimus",
 }: {
   className?: string;
-  jointAngles?: JointAngles;
+  jointAngles?: Angles;
   initialCamera?: CameraState | null;
   onCameraChange?: (state: CameraState) => void;
   compact?: boolean;
   /** Controls rotation from outside (e.g. MujocoInfoPanel in a sidebar). */
   autoRotate?: boolean;
   /** Enables grab-and-drag on the model's parts to turn the servo behind them. */
-  onJointDrag?: (key: keyof JointAngles, rad: number) => void;
+  onJointDrag?: (key: string, rad: number) => void;
   /** Called on release with the final angle — use it to commit to the robot. */
-  onJointDragEnd?: (key: keyof JointAngles, rad: number) => void;
+  onJointDragEnd?: (key: string, rad: number) => void;
+  /** Which robot to show; Optimus by default. */
+  robot?: RobotModelId;
 }) {
   const [autoRotateState, setAutoRotate] = useState(false);
   const autoRotate = autoRotateProp ?? autoRotateState;
@@ -656,7 +725,8 @@ export function MujocoViewer({
   // Ref passed into the Canvas so useFrame always reads the latest value without
   // depending on React prop diffing across the Canvas boundary. Intentional
   // render-time mutation — we want the raw mutable ref, not reactive updates.
-  const anglesRef = useRef<JointAngles | undefined>(jointAngles);
+  const model = ROBOT_MODELS[robot];
+  const anglesRef = useRef<Angles | undefined>(jointAngles);
   // eslint-disable-next-line react-hooks/refs
   anglesRef.current = jointAngles;
 
@@ -664,7 +734,7 @@ export function MujocoViewer({
 
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [dragTip, setDragTip] = useState<{
-    key: keyof JointAngles;
+    key: string;
     deg: number;
     x: number;
     y: number;
@@ -680,7 +750,7 @@ export function MujocoViewer({
             const r = wrapperRef.current?.getBoundingClientRect();
             setDragTip({
               key,
-              deg: Math.round(90 + (rad * 180) / PI),
+              deg: model.displayDeg(key, rad),
               x: clientX - (r?.left ?? 0),
               y: clientY - (r?.top ?? 0),
             });
@@ -691,7 +761,7 @@ export function MujocoViewer({
           },
         }
       : null;
-  }, [onJointDrag, onJointDragEnd]);
+  }, [onJointDrag, onJointDragEnd, model]);
 
   return (
     <div
@@ -708,6 +778,7 @@ export function MujocoViewer({
       >
         <Scene
           autoRotate={autoRotate}
+          model={model}
           anglesRef={anglesRef}
           initialCamera={initialCamera}
           onCameraChange={handleCameraChange}
@@ -727,7 +798,7 @@ export function MujocoViewer({
             backdropFilter: "blur(8px)",
           }}
         >
-          {JOINT_LABELS[dragTip.key]} · {dragTip.deg}°
+          {model.label(dragTip.key)} · {dragTip.deg}°
         </div>
       )}
 

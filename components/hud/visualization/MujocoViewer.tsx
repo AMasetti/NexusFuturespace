@@ -294,11 +294,15 @@ function URDFRobot({
           camera.position.set(initialCamera.px, initialCamera.py, initialCamera.pz);
           controlsRef.current.target.set(initialCamera.tx, initialCamera.ty, initialCamera.tz);
         } else {
-          // Default: orbit around model center, far enough to fit the model
+          // Default: orbit around model center, far enough that the model's
+          // bounding sphere fits the narrower of the two view angles.
           const size = box.getSize(new THREE.Vector3());
           const modelCenter = new THREE.Vector3(0, size.y / 2, 0);
-          const fov = (camera as THREE.PerspectiveCamera).fov ?? 44;
-          const fit = (Math.max(size.x, size.y, size.z) / 2 / Math.tan((fov * D2R) / 2)) * 1.6;
+          const cam = camera as THREE.PerspectiveCamera;
+          const vFov = (cam.fov ?? 44) * D2R;
+          const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (cam.aspect || 1));
+          const radius = size.length() / 2;
+          const fit = (radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.1;
           const dir = camera.position.clone().sub(controlsRef.current.target).normalize();
           camera.position
             .copy(modelCenter)

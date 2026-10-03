@@ -16,6 +16,7 @@ import {
   MujocoInfoPanel,
 } from "@/components/hud";
 import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSidebar";
+import { PanelLeft, PanelRight } from "lucide-react";
 import {
   ServoSliders,
   DEFAULT_JOINT_ANGLES,
@@ -29,7 +30,15 @@ import { ROBOTICS_TASKS } from "@/lib/hud-data";
 import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
 import { RobotWsProvider, useRobotWs } from "@/lib/robot-ws";
 import { type PanelId } from "@/lib/panels";
-import { loadCamera, saveCamera, loadJoints, saveJoints, type CameraState } from "@/lib/persist";
+import {
+  loadCamera,
+  saveCamera,
+  loadJoints,
+  saveJoints,
+  loadSidebarOpen,
+  saveSidebarOpen,
+  type CameraState,
+} from "@/lib/persist";
 
 // ─── FreeRTOS process monitor panel ──────────────────────────────────────────
 
@@ -639,6 +648,34 @@ function PanelContent({
   }
 }
 
+// ─── Sidebar toggle (header) ──────────────────────────────────────────────────
+
+function SidebarToggle({
+  side,
+  open,
+  onClick,
+}: {
+  side: "left" | "right";
+  open: boolean;
+  onClick: () => void;
+}) {
+  const Icon = side === "left" ? PanelLeft : PanelRight;
+  return (
+    <button
+      onClick={onClick}
+      title={`${open ? "Hide" : "Show"} ${side} sidebar`}
+      aria-label={`${open ? "Hide" : "Show"} ${side} sidebar`}
+      aria-pressed={open}
+      className={
+        "rounded-xl p-2 transition-colors hover:bg-white/10 " +
+        (open ? "text-hud-primary" : "text-hud-text-dim")
+      }
+    >
+      <Icon className="h-4 w-4" />
+    </button>
+  );
+}
+
 // ─── Draggable 3D viewer ──────────────────────────────────────────────────────
 
 /**
@@ -978,6 +1015,16 @@ export default function RoboticsPage() {
   };
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
+  const toggleLeft = () => {
+    saveSidebarOpen("left", !leftOpen);
+    setLeftOpen(!leftOpen);
+  };
+  const toggleRight = () => {
+    saveSidebarOpen("right", !rightOpen);
+    setRightOpen(!rightOpen);
+  };
 
   // Load persisted camera and joints after first mount (localStorage is client-only).
   // useLayoutEffect runs before paint, so the restored pose shows without a flash.
@@ -986,6 +1033,8 @@ export default function RoboticsPage() {
     setInitialCamera(loadCamera());
     const savedJoints = loadJoints();
     if (savedJoints) setJointAngles(savedJoints);
+    setLeftOpen(loadSidebarOpen("left") ?? true);
+    setRightOpen(loadSidebarOpen("right") ?? true);
   }, []);
 
   // Save joint angles on change, debounced to avoid hammering localStorage on every slider tick
@@ -1132,8 +1181,9 @@ export default function RoboticsPage() {
             {/* ── TLS cert trust prompt ─────────────────────────────────── */}
             <TrustCertBanner />
             {/* ── Header ───────────────────────────────────────────────── */}
-            <header className="glass-panel flex shrink-0 items-center justify-between rounded-2xl px-5 py-3">
+            <header className="glass-panel flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
               <div className="flex items-center gap-3">
+                <SidebarToggle side="left" open={leftOpen} onClick={toggleLeft} />
                 <HudStatusDot status="online" size="md" pulse />
                 <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
                   Nexus Robotics
@@ -1145,11 +1195,12 @@ export default function RoboticsPage() {
                 <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
                 <div className="h-4 w-px bg-white/10" />
                 <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
+                <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
               </div>
             </header>
 
             <div className="flex min-h-0 flex-1 gap-3">
-              <GlassSidebar side="left" sections={leftSections} />
+              <GlassSidebar side="left" open={leftOpen} sections={leftSections} />
 
               <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
                 <DraggableViewer
@@ -1163,7 +1214,7 @@ export default function RoboticsPage() {
                 />
               </main>
 
-              <GlassSidebar side="right" sections={rightSections} />
+              <GlassSidebar side="right" open={rightOpen} sections={rightSections} />
             </div>
           </div>
         )}

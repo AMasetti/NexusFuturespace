@@ -17,6 +17,8 @@ const DEFAULT_WIDTH = 320;
 const MIN_WIDTH = 240;
 // Never let one sidebar take more than this share of the window.
 const MAX_SHARE = 0.45;
+// Matches the parent's gap-3: a hidden sidebar also gives back its gap.
+const GAP = 12;
 
 const clampWidth = (w: number) =>
   Math.round(Math.min(Math.max(w, MIN_WIDTH), window.innerWidth * MAX_SHARE));
@@ -24,15 +26,18 @@ const clampWidth = (w: number) =>
 /**
  * Frosted, rounded sidebar that stacks collapsible panels. Panels inside render
  * on the "glass" surface, so regular HudPanels become translucent cards.
- * A pill-shaped grip on the inner edge resizes it (double-click resets).
+ * A pill-shaped grip on the inner edge resizes it (double-click resets);
+ * `open={false}` slides it away so the viewer takes the space.
  */
 export function GlassSidebar({
   side,
   sections,
+  open = true,
   className,
 }: {
   side: "left" | "right";
   sections: GlassSection[];
+  open?: boolean;
   className?: string;
 }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
@@ -79,26 +84,42 @@ export function GlassSidebar({
 
   return (
     <HudSurfaceProvider value="glass">
-      <div className={cn("relative shrink-0", resizing && "select-none")} style={{ width }}>
-        <aside
-          className={cn(
-            "glass-panel glass-scroll flex h-full w-full flex-col gap-2 overflow-y-auto rounded-3xl p-2",
-            className
-          )}
-        >
-          {sections.map((s) => {
-            const isCollapsed = collapsed[s.id] ?? false;
-            return (
-              <div
-                key={s.id}
-                className="shrink-0"
-                style={s.height && !isCollapsed ? { height: s.height } : undefined}
-              >
-                {s.content(isCollapsed, () => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] })))}
-              </div>
-            );
-          })}
-        </aside>
+      <div
+        className={cn(
+          "relative shrink-0",
+          resizing ? "select-none" : "transition-[width,margin,opacity] duration-300 ease-out",
+          !open && "pointer-events-none opacity-0"
+        )}
+        style={{
+          width: open ? width : 0,
+          [side === "left" ? "marginRight" : "marginLeft"]: open ? 0 : -GAP,
+        }}
+        aria-hidden={!open}
+        inert={!open}
+      >
+        <div className={cn("h-full overflow-hidden", side === "right" && "flex justify-end")}>
+          {/* Fixed width so panels don't reflow while the sidebar slides closed. */}
+          <aside
+            className={cn(
+              "glass-panel glass-scroll flex h-full shrink-0 flex-col gap-2 overflow-y-auto rounded-3xl p-2",
+              className
+            )}
+            style={{ width }}
+          >
+            {sections.map((s) => {
+              const isCollapsed = collapsed[s.id] ?? false;
+              return (
+                <div
+                  key={s.id}
+                  className="shrink-0"
+                  style={s.height && !isCollapsed ? { height: s.height } : undefined}
+                >
+                  {s.content(isCollapsed, () => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] })))}
+                </div>
+              );
+            })}
+          </aside>
+        </div>
 
         {/* Resize grip: an iPhone-style pill centred in the gap beside the sidebar. */}
         <div

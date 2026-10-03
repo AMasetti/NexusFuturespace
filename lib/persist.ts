@@ -128,6 +128,25 @@ export function saveSidebarWidth(side: string, width: number): void {
   }
 }
 
+const KEY_SIDEBAR_OPEN = "robotics:sidebar-open:v1";
+
+export function loadSidebarOpen(side: string): boolean | null {
+  try {
+    const raw = localStorage.getItem(`${KEY_SIDEBAR_OPEN}:${side}`);
+    return raw === null ? null : raw === "1";
+  } catch {
+    return null;
+  }
+}
+
+export function saveSidebarOpen(side: string, open: boolean): void {
+  try {
+    localStorage.setItem(`${KEY_SIDEBAR_OPEN}:${side}`, open ? "1" : "0");
+  } catch {
+    /* quota exceeded — ignore */
+  }
+}
+
 export function clearPersistedLayout(): void {
   try {
     localStorage.removeItem(KEY_PANELS);

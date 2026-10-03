@@ -2,6 +2,8 @@
 
 Digital twin for small servo robots: a 3D model you can pose by hand, live telemetry, and two-way control of the real robot from the browser. Ships with **Optimus**, a 14-servo biped with a live robot link, and **Spot Micro**, a 12-servo quadruped in simulation. Any robot with a URDF can be added with a single JSON file.
 
+**Live demo: [robotics.amasetti.com](https://robotics.amasetti.com/robotics)** — runs in the browser as a simulator, no robot needed. Pose the model, build a pose sequence, switch robots; it also works on a phone.
+
 ![Optimus in the robotics view: power draw, IMU, FreeRTOS and servo control around the 3D model](docs/robotics-ui.png)
 
 Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Three.js.

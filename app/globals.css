@@ -284,3 +284,111 @@ body {
   border-color: rgba(0, 255, 200, 0.95);
   box-shadow: 0 0 10px rgba(0, 255, 200, 0.7);
 }
+
+/* ─── Glass mode ──────────────────────────────────────────────────────────────
+   Frosted sidebars over a slowly drifting backdrop (same technique as Unibot):
+   three radial blobs in the HUD palette whose positions are animated through
+   registered custom properties, so the gradients interpolate smoothly. */
+
+@property --blob-1-x {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 8%;
+}
+@property --blob-1-y {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 6%;
+}
+@property --blob-2-x {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 92%;
+}
+@property --blob-2-y {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 10%;
+}
+@property --blob-3-x {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 50%;
+}
+@property --blob-3-y {
+  syntax: "<percentage>";
+  inherits: true;
+  initial-value: 105%;
+}
+
+.glass-backdrop {
+  background:
+    radial-gradient(
+      ellipse 55% 45% at var(--blob-1-x) var(--blob-1-y),
+      rgba(0, 200, 255, 0.28),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at var(--blob-2-x) var(--blob-2-y),
+      rgba(120, 90, 255, 0.22),
+      transparent 62%
+    ),
+    radial-gradient(
+      ellipse 65% 55% at var(--blob-3-x) var(--blob-3-y),
+      rgba(0, 255, 156, 0.18),
+      transparent 68%
+    ),
+    linear-gradient(160deg, #04121f 0%, var(--hud-bg) 100%);
+  animation:
+    blob-1-drift 14s ease-in-out infinite,
+    blob-2-drift 17s ease-in-out infinite,
+    blob-3-drift 20s ease-in-out infinite;
+}
+
+@keyframes blob-1-drift {
+  50% {
+    --blob-1-x: 34%;
+    --blob-1-y: 32%;
+  }
+}
+@keyframes blob-2-drift {
+  50% {
+    --blob-2-x: 64%;
+    --blob-2-y: 36%;
+  }
+}
+@keyframes blob-3-drift {
+  50% {
+    --blob-3-x: 74%;
+    --blob-3-y: 80%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-backdrop {
+    animation: none;
+  }
+}
+
+/* Outer frosted surface: sidebars, header, viewer frame. */
+.glass-panel {
+  background: rgba(var(--hud-surface-rgb), 0.42);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 24px 48px -16px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Cards inside a .glass-panel. No backdrop-filter of their own: the parent
+   already blurs, and nesting filters is expensive to composite. */
+.glass-card {
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}

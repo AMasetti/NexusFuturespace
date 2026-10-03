@@ -8,6 +8,7 @@ import URDFLoader, { type URDFRobot as URDFRobotType } from "urdf-loader";
 import { STLLoader, OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import type { JointAngles } from "@/components/hud/panels/ServoSliders";
 import type { CameraState } from "@/lib/persist";
+import { HudPanel } from "@/components/hud/core/HudPanel";
 
 const PI = Math.PI;
 const H = PI / 2;
@@ -387,6 +388,69 @@ function SimInfoPanel({
   );
 }
 
+// ─── Sim info as a standalone panel (sidebar layout) ──────────────────────────
+
+const SIM_INFO: [string, string][] = [
+  ["Model", "Optimus full"],
+  ["DOF", "23"],
+  ["Joints", "23"],
+  ["Bodies", "25"],
+  ["Meshes", "24 STL"],
+  ["Timestep", "0.001 s"],
+  ["Solver", "PGS"],
+  ["Integrator", "Euler"],
+  ["Gravity", "9.81 m/s²"],
+];
+
+export function MujocoInfoPanel({
+  autoRotate,
+  onToggleRotate,
+  collapsed,
+  onToggle,
+}: {
+  autoRotate: boolean;
+  onToggleRotate: () => void;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  return (
+    <HudPanel title="MuJoCo" subtitle="v3.2.3" collapsed={collapsed} onToggle={onToggle}>
+      <div
+        className="flex flex-col gap-3 p-3"
+        style={{ fontFamily: "var(--font-jetbrains-mono, monospace)", fontSize: 10 }}
+      >
+        <SimTime />
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+          {SIM_INFO.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-2">
+              <span style={DIM}>{k.toUpperCase()}</span>
+              <span style={VAL}>{v.toUpperCase()}</span>
+            </div>
+          ))}
+        </div>
+        <button
+          onClick={onToggleRotate}
+          className="flex items-center justify-center gap-2 rounded-full px-3 py-1.5 tracking-widest uppercase transition-colors hover:bg-white/10"
+          style={{
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.04)",
+            color: "rgba(0,200,255,0.85)",
+            fontSize: 9,
+          }}
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{
+              background: autoRotate ? "rgba(0,255,156,0.9)" : "rgba(0,200,255,0.4)",
+            }}
+          />
+          {autoRotate ? "Auto-rotate on" : "Auto-rotate off"}
+        </button>
+      </div>
+    </HudPanel>
+  );
+}
+
 // ─── Public component ─────────────────────────────────────────────────────────
 
 export function MujocoViewer({
@@ -395,14 +459,18 @@ export function MujocoViewer({
   initialCamera = null,
   onCameraChange,
   compact = false,
+  autoRotate: autoRotateProp,
 }: {
   className?: string;
   jointAngles?: JointAngles;
   initialCamera?: CameraState | null;
   onCameraChange?: (state: CameraState) => void;
   compact?: boolean;
+  /** Controls rotation from outside (e.g. MujocoInfoPanel in a sidebar). */
+  autoRotate?: boolean;
 }) {
-  const [autoRotate, setAutoRotate] = useState(false);
+  const [autoRotateState, setAutoRotate] = useState(false);
+  const autoRotate = autoRotateProp ?? autoRotateState;
 
   // Ref passed into the Canvas so useFrame always reads the latest value without
   // depending on React prop diffing across the Canvas boundary. Intentional

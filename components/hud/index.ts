@@ -1,5 +1,6 @@
 // Core
 export { HudPanel } from "./core/HudPanel";
+export { HudSurfaceProvider, useHudSurface, type HudSurface } from "./core/HudSurface";
 export { HudBadge } from "./core/HudBadge";
 export { HudLabel } from "./core/HudLabel";
 export { HudSeparator } from "./core/HudSeparator";
@@ -19,7 +20,7 @@ export { NodeGraph } from "./visualization/NodeGraph";
 export { TopographyMap } from "./visualization/TopographyMap";
 export { MicroscopyViewer } from "./visualization/MicroscopyViewer";
 export { CircuitSchematic } from "./visualization/CircuitSchematic";
-export { MujocoViewer } from "./visualization/MujocoViewer";
+export { MujocoViewer, MujocoInfoPanel } from "./visualization/MujocoViewer";
 export type { PlacedBoard, Wire, BoardType, PinType } from "./visualization/CircuitSchematic";
 
 // Panels

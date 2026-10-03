@@ -3,6 +3,7 @@ name: UI CI
 on:
   push:
     paths:
+      - 'scripts/**'
       - 'app/**'
       - 'components/**'
       - 'lib/**'
@@ -14,6 +15,7 @@ on:
       - 'eslint.config.mjs'
   pull_request:
     paths:
+      - 'scripts/**'
       - 'app/**'
       - 'components/**'
       - 'lib/**'
@@ -46,6 +48,9 @@ jobs:
 
       - name: Type-check
         run: npm run type-check
+
+      - name: Validate robot definitions
+        run: npm run validate:robots
 
       - name: Build
         run: npm run build

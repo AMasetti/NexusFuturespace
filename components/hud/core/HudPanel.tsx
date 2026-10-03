@@ -2,6 +2,7 @@
 
 import { cn } from "@/lib/utils";
 import { HudStatusDot } from "./HudStatusDot";
+import { useHudSurface } from "./HudSurface";
 
 interface HudPanelProps {
   title?: string;
@@ -35,17 +36,23 @@ export function HudPanel({
   onToggle,
 }: HudPanelProps) {
   const collapsible = onToggle !== undefined;
+  const glass = useHudSurface() === "glass";
 
   return (
     <div
       className={cn(
-        "border-hud-border relative flex flex-col overflow-hidden rounded-sm border",
-        variant === "default" && "hud-panel-bg",
-        variant === "ghost" && "bg-transparent",
-        variant === "elevated" && "hud-panel-bg hud-glow-box",
-        glowing && "hud-glow-box",
+        "relative flex flex-col overflow-hidden",
+        glass
+          ? "glass-card rounded-2xl"
+          : cn(
+              "border-hud-border rounded-sm border",
+              variant === "default" && "hud-panel-bg",
+              variant === "ghost" && "bg-transparent",
+              variant === "elevated" && "hud-panel-bg hud-glow-box",
+              glowing && "hud-glow-box",
+              cornerBrackets && "hud-corners"
+            ),
         flickering && "animate-hud-flicker",
-        cornerBrackets && "hud-corners",
         className
       )}
     >
@@ -54,7 +61,8 @@ export function HudPanel({
       {(title || status) && (
         <div
           className={cn(
-            "border-hud-border/60 flex items-center justify-between border-b px-3 py-2",
+            "flex items-center justify-between border-b",
+            glass ? "border-white/5 px-4 py-3" : "border-hud-border/60 px-3 py-2",
             collapsible && "cursor-pointer select-none"
           )}
           style={collapsible ? { touchAction: "manipulation" } : undefined}

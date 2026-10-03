@@ -1,1 +1,9 @@
-npx lint-staged
+# Lint + format the staged files (no warnings allowed), then type-check the
+# whole project — a type error can surface in files the commit didn't touch.
+npx lint-staged || exit 1
+
+echo "▸ type-check"
+if ! npx tsc --noEmit; then
+  echo "✖ commit rejected: type errors (npm run type-check)" >&2
+  exit 1
+fi

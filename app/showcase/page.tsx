@@ -1,6 +1,7 @@
 "use client";
 
 import { Mic, Shield, Radio, Zap, Eye, Navigation } from "lucide-react";
+import { useRobotDefs } from "@/lib/use-robot-defs";
 
 import {
   HudPanel,
@@ -98,6 +99,13 @@ const ACTIONS = [
 ];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+/** Optimus from its robot.json — the viewer needs a definition to know the model. */
+function ShowcaseViewer() {
+  const { defs } = useRobotDefs();
+  const def = defs?.find((d) => d.id === "optimus");
+  return def ? <MujocoViewer def={def} className="w-full overflow-hidden rounded-sm" /> : null;
+}
+
 export default function ShowcasePage() {
   return (
     <main className="min-h-screen">
@@ -572,7 +580,7 @@ export default function ShowcasePage() {
 
           {/* MuJoCo / Optimus 3D viewer */}
           <ComponentCard name="MujocoViewer — Optimus Full · 3D Physics Visualization">
-            <MujocoViewer className="w-full overflow-hidden rounded-sm" />
+            <ShowcaseViewer />
           </ComponentCard>
         </Section>
       </div>

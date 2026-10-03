@@ -1,0 +1,173 @@
+{
+  "name": "Spot Micro",
+  "description": "Quadruped · 12 servos · simulation",
+  "urdf": "spotmicroai.urdf",
+  "zeroDeg": 0,
+  "servos": [
+    {
+      "id": "front_left_shoulder",
+      "label": "Shoulder FL",
+      "group": "Front Left",
+      "limitsDeg": [-31, 31],
+      "joints": [
+        {
+          "joint": "front_left_shoulder",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "front_left_leg",
+      "label": "Leg FL",
+      "group": "Front Left",
+      "limitsDeg": [-152, 88],
+      "joints": [
+        {
+          "joint": "front_left_leg",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "front_left_foot",
+      "label": "Foot FL",
+      "group": "Front Left",
+      "limitsDeg": [-148, 5],
+      "joints": [
+        {
+          "joint": "front_left_foot",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "front_right_shoulder",
+      "label": "Shoulder FR",
+      "group": "Front Right",
+      "limitsDeg": [-31, 31],
+      "joints": [
+        {
+          "joint": "front_right_shoulder",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "front_right_leg",
+      "label": "Leg FR",
+      "group": "Front Right",
+      "limitsDeg": [-152, 88],
+      "joints": [
+        {
+          "joint": "front_right_leg",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "front_right_foot",
+      "label": "Foot FR",
+      "group": "Front Right",
+      "limitsDeg": [-148, 5],
+      "joints": [
+        {
+          "joint": "front_right_foot",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_left_shoulder",
+      "label": "Shoulder RL",
+      "group": "Rear Left",
+      "limitsDeg": [-31, 31],
+      "joints": [
+        {
+          "joint": "rear_left_shoulder",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_left_leg",
+      "label": "Leg RL",
+      "group": "Rear Left",
+      "limitsDeg": [-152, 88],
+      "joints": [
+        {
+          "joint": "rear_left_leg",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_left_foot",
+      "label": "Foot RL",
+      "group": "Rear Left",
+      "limitsDeg": [-148, 5],
+      "joints": [
+        {
+          "joint": "rear_left_foot",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_right_shoulder",
+      "label": "Shoulder RR",
+      "group": "Rear Right",
+      "limitsDeg": [-31, 31],
+      "joints": [
+        {
+          "joint": "rear_right_shoulder",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_right_leg",
+      "label": "Leg RR",
+      "group": "Rear Right",
+      "limitsDeg": [-152, 88],
+      "joints": [
+        {
+          "joint": "rear_right_leg",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    },
+    {
+      "id": "rear_right_foot",
+      "label": "Foot RR",
+      "group": "Rear Right",
+      "limitsDeg": [-148, 5],
+      "joints": [
+        {
+          "joint": "rear_right_foot",
+          "scale": 1
+        }
+      ],
+      "type": "SG995"
+    }
+  ],
+  "servoTypes": {
+    "SG995": {
+      "idleA": 0.36,
+      "stallA": 2.0
+    }
+  },
+  "power": {
+    "busV": 6.0
+  }
+}

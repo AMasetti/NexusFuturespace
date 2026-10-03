@@ -60,15 +60,17 @@ const LINK_TO_JOINT: Partial<Record<string, keyof JointAngles>> = {
   "Feet-R": "Servo-Ankle-R",
 };
 
-// Sign between a JointAngles value and the URDF joint value (see useFrame below).
-const URDF_SIGN: Partial<Record<keyof JointAngles, number>> = {
-  "Servo-Knee-L-Top": -1,
-  "Servo-Knee-R-Top": -1,
-  "Servo-Knee-L-Bottom": -1,
-  "Servo-Ankle-L": -1,
-  "Servo-Showlder-R-Front-Back": -1,
-  "Servo-Showlder-L-Inward-Outward": -1,
-  "Servo-Forearm-L": -1,
+// URDF joint that visibly turns when a servo moves, and the sign between the
+// JointAngles value and that joint's value (see useFrame below). Hip pitch turns
+// the thigh bars at the hip, not the "Servo-Knee-*-Top" joint at the knee.
+const DRAG_JOINT: Partial<Record<keyof JointAngles, { joint: string; sign: number }>> = {
+  "Servo-Knee-L-Top": { joint: "Unactuated-Knee-L-Top", sign: -1 },
+  "Servo-Knee-R-Top": { joint: "Unactuated-Knee-R-Top", sign: -1 },
+  "Servo-Knee-L-Bottom": { joint: "Servo-Knee-L-Bottom", sign: -1 },
+  "Servo-Ankle-L": { joint: "Servo-Ankle-L", sign: -1 },
+  "Servo-Showlder-R-Front-Back": { joint: "Servo-Showlder-R-Front-Back", sign: -1 },
+  "Servo-Showlder-L-Inward-Outward": { joint: "Servo-Showlder-L-Inward-Outward", sign: -1 },
+  "Servo-Forearm-L": { joint: "Servo-Forearm-L", sign: -1 },
 };
 
 // Same travel as the sliders: 0–180° display = ±90° around halt.
@@ -153,7 +155,8 @@ function URDFRobot({
     const robot = robotRef.current;
     const link = e.button === 0 ? draggableLink(e.object) : null;
     const key = link ? LINK_TO_JOINT[link.name] : undefined;
-    const joint = key && robot?.joints[key];
+    const pivotJoint = key ? (DRAG_JOINT[key] ?? { joint: key, sign: 1 }) : undefined;
+    const joint = pivotJoint && robot?.joints[pivotJoint.joint];
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!link || !key || !joint || !rect) return;
     e.stopPropagation();
@@ -171,7 +174,7 @@ function URDFRobot({
     // A positive turn about an axis pointing at the camera looks counter-clockwise.
     const axis = joint.axis.clone().transformDirection(joint.matrixWorld);
     const facing = axis.dot(camera.position.clone().sub(pivot)) >= 0 ? 1 : -1;
-    const sign = facing * (URDF_SIGN[key] ?? 1);
+    const sign = facing * pivotJoint.sign;
 
     let last = Math.atan2(e.clientY - cy, e.clientX - cx);
     let value = anglesRef.current?.[key] ?? 0;
@@ -295,10 +298,6 @@ function URDFRobot({
     // Actuated joints — signs match hardware convention verified 2026-08-11
     robot.setJointValue("Servo-Hip-L", hipL);
     robot.setJointValue("Servo-Hip-R", hipR);
-    robot.setJointValue("Servo-Knee-L-Top", -kneeLTop); // Hip Pitch L inverted in URDF
-    robot.setJointValue("Servo-Knee-R-Top", -kneeRTop); // Hip Pitch R inverted in URDF
-    robot.setJointValue("Servo-Knee-L-Bottom", -kneeLBot); // Knee Bend L inverted in URDF
-    robot.setJointValue("Servo-Knee-R-Bottom", kneeRBot);
     robot.setJointValue("Servo-Ankle-L", -ankleL); // Ankle Roll L inverted in URDF
     robot.setJointValue("Servo-Ankle-R", ankleR);
     robot.setJointValue("Servo-Showlder-L-Front-Back", shldrLFB);
@@ -309,23 +308,31 @@ function URDFRobot({
     robot.setJointValue("Servo-Forearm-L", -forearmL); // Forearm Lat L inverted in URDF
     robot.setJointValue("Servo-Forearm-R", forearmR);
 
-    // ── Left leg parallelogram ─────────────────────────────────────────────────
-    // Sartorius-LT (parent=Hip-L): counter-rotates so it stays vertical in world
-    robot.setJointValue("Unactuated-Knee-L-Top", -kneeLTop);
-    robot.setJointValue("Unactuated-Tendon-L-Top", -kneeLTop);
-    // Anckle-L (parent=Sartorius-LB): world angle = hipL + (-hipL) + kneeLTop + kneeLBot + θ
-    // For ankle to stay level → θ = -(kneeLTop + kneeLBot)
-    robot.setJointValue("Unactuated-Knee-L-Bottom", -kneeLBot);
-    // Tendon-LB parent is Anckle-L (not Sartorius-LB), so it must also cancel ankleL
-    robot.setJointValue("Unactuated-Tendon-L-Bottom", kneeLBot);
-
-    // ── Right leg parallelogram ────────────────────────────────────────────────
-    // R joints have axis=−Z: a value θ rotates −θ physically, so formulas are
-    // sign-flipped vs left to produce the same physical counter-rotation.
-    robot.setJointValue("Unactuated-Knee-R-Top", -kneeRTop);
-    robot.setJointValue("Unactuated-Tendon-R-Top", -kneeRTop);
-    robot.setJointValue("Unactuated-Knee-R-Bottom", -kneeRBot);
-    robot.setJointValue("Unactuated-Tendon-R-Bottom", kneeRBot);
+    // ── Leg parallelograms ──────────────────────────────────────────────────────
+    // Each leg has two 4-bar linkages: thigh (Hip → Knee) and shin (Knee → Anckle).
+    // Both bars of a linkage turn by the same angle and the link they carry keeps
+    // its orientation. The URDF chains each one as bar → coupler, so the joint
+    // after the bar must undo the bar's turn. With the URDF axes (all parallel,
+    // same direction inside each linkage) that gives:
+    //   thigh: Unactuated-Knee-*-Top = Unactuated-Tendon-*-Top = θ, Servo-Knee-*-Top = −θ
+    //   shin:  Servo-Knee-*-Bottom = φ, Unactuated-Knee-*-Bottom = −φ, Unactuated-Tendon-*-Bottom = φ
+    // θ/φ keep the bar directions verified against the hardware (L shin inverted).
+    const thighL = -kneeLTop;
+    const thighR = -kneeRTop;
+    const shinL = -kneeLBot;
+    const shinR = kneeRBot;
+    robot.setJointValue("Unactuated-Knee-L-Top", thighL);
+    robot.setJointValue("Unactuated-Tendon-L-Top", thighL);
+    robot.setJointValue("Servo-Knee-L-Top", -thighL);
+    robot.setJointValue("Unactuated-Knee-R-Top", thighR);
+    robot.setJointValue("Unactuated-Tendon-R-Top", thighR);
+    robot.setJointValue("Servo-Knee-R-Top", -thighR);
+    robot.setJointValue("Servo-Knee-L-Bottom", shinL);
+    robot.setJointValue("Unactuated-Knee-L-Bottom", -shinL);
+    robot.setJointValue("Unactuated-Tendon-L-Bottom", shinL);
+    robot.setJointValue("Servo-Knee-R-Bottom", shinR);
+    robot.setJointValue("Unactuated-Knee-R-Bottom", -shinR);
+    robot.setJointValue("Unactuated-Tendon-R-Bottom", shinR);
   });
 
   return (

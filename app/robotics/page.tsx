@@ -639,6 +639,50 @@ function PanelContent({
   }
 }
 
+// ─── Draggable 3D viewer ──────────────────────────────────────────────────────
+
+/**
+ * 3D viewer whose parts can be grabbed and dragged to turn the servo behind
+ * them. Same rule as the sliders: free while offline, override-only once a
+ * robot is connected; releasing commits the pose like releasing a slider.
+ */
+function DraggableViewer({
+  jointAngles,
+  onJointAnglesChange,
+  onJointAnglesCommit,
+  controlMode,
+  robotConnected,
+  autoRotate,
+  initialCamera,
+}: {
+  jointAngles: JointAngles;
+  onJointAnglesChange: (angles: JointAngles) => void;
+  onJointAnglesCommit: (angles: JointAngles) => void;
+  controlMode: "observe" | "override";
+  robotConnected: boolean;
+  autoRotate: boolean;
+  initialCamera: CameraState | null;
+}) {
+  const rosStatus = useRosStatus();
+  const canDrive = !(rosStatus === "connected" || robotConnected) || controlMode === "override";
+
+  return (
+    <MujocoViewer
+      compact
+      autoRotate={autoRotate}
+      jointAngles={jointAngles}
+      initialCamera={initialCamera}
+      onCameraChange={saveCamera}
+      onJointDrag={
+        canDrive ? (key, rad) => onJointAnglesChange({ ...jointAngles, [key]: rad }) : undefined
+      }
+      onJointDragEnd={
+        canDrive ? (key, rad) => onJointAnglesCommit({ ...jointAngles, [key]: rad }) : undefined
+      }
+    />
+  );
+}
+
 // ─── TLS cert trust banner ────────────────────────────────────────────────────
 
 function TrustCertBanner() {
@@ -1108,12 +1152,14 @@ export default function RoboticsPage() {
               <GlassSidebar sections={leftSections} />
 
               <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
-                <MujocoViewer
-                  compact
-                  autoRotate={autoRotate}
+                <DraggableViewer
                   jointAngles={jointAngles}
+                  onJointAnglesChange={setJointAngles}
+                  onJointAnglesCommit={setCommittedAngles}
+                  controlMode={controlMode}
+                  robotConnected={robotConnected}
+                  autoRotate={autoRotate}
                   initialCamera={initialCamera}
-                  onCameraChange={saveCamera}
                 />
               </main>
 

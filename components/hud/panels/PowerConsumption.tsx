@@ -74,25 +74,21 @@ const MAX_W = BASELINE_W + PEAK_EXTRA_W; // ≈ 117.60 W
 // ── Groups ────────────────────────────────────────────────────────────────────
 const GROUPS: {
   label: string;
-  model: string;
   color: string;
   keys: readonly JointKey[];
 }[] = [
   {
     label: "LEFT LEG",
-    model: "SG995",
     color: "rgba(0,200,255,0.85)",
     keys: ["Servo-Hip-L", "Servo-Knee-L-Top", "Servo-Knee-L-Bottom", "Servo-Ankle-L"],
   },
   {
     label: "RIGHT LEG",
-    model: "SG995",
     color: "rgba(0,255,156,0.85)",
     keys: ["Servo-Hip-R", "Servo-Knee-R-Top", "Servo-Knee-R-Bottom", "Servo-Ankle-R"],
   },
   {
     label: "ARMS",
-    model: "S3003",
     color: "rgba(180,120,255,0.85)",
     keys: [
       "Servo-Showlder-L-Front-Back",
@@ -237,11 +233,14 @@ function LoadBar({
   movePct,
   color,
   height,
+  peakPct,
 }: {
   idlePct: number;
   movePct: number;
   color: string;
   height: number;
+  /** Session peak as % of the bar — drawn as a tick. */
+  peakPct?: number;
 }) {
   return (
     <div
@@ -256,6 +255,12 @@ function LoadBar({
         className="absolute inset-y-0"
         style={{ left: `${idlePct}%`, width: `${movePct}%`, background: color }}
       />
+      {peakPct !== undefined && peakPct > idlePct + 0.5 && (
+        <div
+          className="absolute inset-y-0 w-0.5 -translate-x-1/2"
+          style={{ left: `${Math.min(peakPct, 99.5)}%`, background: C_PEAK }}
+        />
+      )}
     </div>
   );
 }
@@ -290,20 +295,29 @@ interface PowerConsumptionProps {
 }
 
 interface SessionStats {
+  groupPeakW: Record<string, number>;
   seconds: number;
   peakW: number;
   avgW: number;
   energyWh: number;
 }
 
-const freshSession = () => ({ start: performance.now(), energyJ: 0, peakW: BASELINE_W });
+const idleGroupW = () =>
+  Object.fromEntries(GROUPS.map((g) => [g.label, calcGroupW(g.keys, {}).idleW]));
+
+const freshSession = () => ({
+  start: performance.now(),
+  energyJ: 0,
+  peakW: BASELINE_W,
+  groupPeakW: idleGroupW(),
+});
 
 export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumptionProps) {
   const prevAngles = useRef<JointAngles>(angles);
   const prevTime = useRef<number>(0);
   const smoothedW = useRef(BASELINE_W);
   const velocities = useRef<Partial<Record<JointKey, number>>>({});
-  const session = useRef({ start: 0, energyJ: 0, peakW: BASELINE_W });
+  const session = useRef(freshSession());
   const anglesRef = useRef(angles);
   useLayoutEffect(() => {
     anglesRef.current = angles;
@@ -313,6 +327,7 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
   const [displayW, setDisplayW] = useState(BASELINE_W);
   const [velSnap, setVelSnap] = useState<Partial<Record<JointKey, number>>>({});
   const [stats, setStats] = useState<SessionStats>({
+    groupPeakW: idleGroupW(),
     seconds: 0,
     peakW: BASELINE_W,
     avgW: BASELINE_W,
@@ -368,6 +383,10 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
         const sess = session.current;
         sess.energyJ += w * dt;
         sess.peakW = Math.max(sess.peakW, w);
+        for (const g of GROUPS) {
+          const gw = calcGroupW(g.keys, vel).totalW;
+          sess.groupPeakW[g.label] = Math.max(sess.groupPeakW[g.label] ?? 0, gw);
+        }
         const seconds = (now - sess.start) / 1000;
 
         setSamples((p) => [...(p.length >= BUFFER_LEN ? p.slice(1) : p), w]);
@@ -378,6 +397,7 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
           peakW: sess.peakW,
           avgW: seconds > 0.5 ? sess.energyJ / seconds : w,
           energyWh: sess.energyJ / 3600,
+          groupPeakW: { ...sess.groupPeakW },
         });
         lastTick = now;
       }
@@ -391,7 +411,13 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
   const resetSession = () => {
     session.current = freshSession();
     setSamples(Array(BUFFER_LEN).fill(smoothedW.current));
-    setStats({ seconds: 0, peakW: smoothedW.current, avgW: smoothedW.current, energyWh: 0 });
+    setStats({
+      seconds: 0,
+      peakW: smoothedW.current,
+      avgW: smoothedW.current,
+      energyWh: 0,
+      groupPeakW: { ...session.current.groupPeakW },
+    });
   };
 
   const movementW = displayW - BASELINE_W;
@@ -488,11 +514,12 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
             const { idleW, moveW, totalW } = calcGroupW(g.keys, velSnap);
             const spec = SERVO_TYPE[g.keys[0]];
             const gMax = g.keys.length * SUPPLY_V * (spec.idle + spec.extra);
+            const gPeak = stats.groupPeakW[g.label] ?? idleW;
             return (
               <div key={g.label} className="flex flex-col gap-1">
                 <div className="grid grid-cols-[1fr_auto_auto] items-baseline gap-3">
                   <span style={{ ...T_LABEL, color: g.color }}>{g.label}</span>
-                  <span style={T_LABEL}>{g.model}</span>
+                  <span style={{ ...T_LABEL, color: C_PEAK }}>peak {gPeak.toFixed(1)} W</span>
                   <span
                     className="min-w-[4.5rem] text-right"
                     style={{ ...T_VALUE, color: g.color }}
@@ -506,6 +533,7 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
                   movePct={(moveW / gMax) * 100}
                   color={g.color}
                   height={5}
+                  peakPct={(gPeak / gMax) * 100}
                 />
               </div>
             );

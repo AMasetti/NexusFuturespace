@@ -113,125 +113,150 @@ const BUFFER_LEN = WINDOW_S * SAMPLE_HZ; // 100 samples
 // ── Colours ───────────────────────────────────────────────────────────────────
 const C_LINE = "rgba(0,200,255,0.90)";
 const C_FILL = "rgba(0,200,255,0.10)";
-const C_PEAK = "rgba(0,255,156,0.80)";
-const C_GRID = "rgba(0,200,255,0.10)";
-const C_DIM = "rgba(0,200,255,0.40)";
+const C_PEAK = "rgba(0,255,156,0.85)";
+const C_IDLE = "rgba(0,255,156,0.75)";
+const C_GRID = "rgba(0,200,255,0.12)";
+const C_DIM = "rgba(0,200,255,0.50)";
 const C_VAL = "rgba(0,200,255,0.95)";
+const C_ARMS = "rgba(180,120,255,0.85)";
+
+// ── Type scale — four sizes, used everywhere in the panel ─────────────────────
+const MONO: React.CSSProperties = {
+  fontFamily: "var(--font-jetbrains-mono, monospace)",
+  fontVariantNumeric: "tabular-nums",
+};
+const T_LABEL: React.CSSProperties = {
+  ...MONO,
+  fontSize: 10,
+  letterSpacing: "0.12em",
+  textTransform: "uppercase",
+  color: C_DIM,
+};
+const T_VALUE: React.CSSProperties = { ...MONO, fontSize: 13, fontWeight: 700 };
+const T_UNIT: React.CSSProperties = { ...MONO, fontSize: 11, color: C_DIM, marginLeft: 3 };
+const T_HERO: React.CSSProperties = { ...MONO, fontSize: 34, fontWeight: 700, lineHeight: 1 };
+
+const CARD: React.CSSProperties = {
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.07)",
+};
 
 // ── Chart ─────────────────────────────────────────────────────────────────────
-const CH_W = 240;
-const CH_H = 120;
+// The SVG stretches to the panel width, so it only draws geometry (with
+// non-scaling strokes); labels and the live dot are HTML laid over it.
+const CH_H = 96;
+
+const pctOf = (w: number) => Math.max(0, Math.min(1, w / MAX_W)) * 100;
 
 function PowerChart({ samples, peakW }: { samples: number[]; peakW: number }) {
-  const toX = (i: number) => (i / (BUFFER_LEN - 1)) * CH_W;
-  const toY = (w: number) => CH_H - Math.max(0, Math.min(1, w / MAX_W)) * CH_H;
+  const toX = (i: number) => (i / (BUFFER_LEN - 1)) * 100;
+  const toY = (w: number) => 100 - pctOf(w);
 
-  const pts = samples.map((w, i) => `${toX(i).toFixed(1)},${toY(w).toFixed(1)}`).join(" ");
-  const area =
-    `M${toX(0).toFixed(1)},${CH_H} ` +
-    samples.map((w, i) => `L${toX(i).toFixed(1)},${toY(w).toFixed(1)}`).join(" ") +
-    ` L${toX(samples.length - 1).toFixed(1)},${CH_H} Z`;
-
-  const baselineY = toY(BASELINE_W);
-  const peakY = toY(peakW);
-
-  // Grid lines at meaningful wattage marks
-  const gridMarks = [BASELINE_W, MAX_W * 0.5, MAX_W * 0.75, MAX_W].map((w) => ({
-    y: toY(w),
-    label: `${w.toFixed(0)}W`,
-    isBaseline: w === BASELINE_W,
-  }));
+  const line = samples.map((w, i) => `${toX(i).toFixed(2)},${toY(w).toFixed(2)}`).join(" ");
+  const area = `M0,100 L${line.replaceAll(" ", " L")} L${toX(samples.length - 1).toFixed(2)},100 Z`;
+  const last = samples[samples.length - 1] ?? BASELINE_W;
+  const marks = [MAX_W, MAX_W * 0.5, BASELINE_W];
 
   return (
-    <svg
-      viewBox={`0 0 ${CH_W} ${CH_H}`}
-      preserveAspectRatio="none"
-      style={{ width: "100%", height: CH_H, display: "block" }}
-    >
-      {/* Grid */}
-      {gridMarks.map(({ y, label, isBaseline }) => (
-        <g key={label}>
-          <line
-            x1={0}
-            y1={y}
-            x2={CH_W}
-            y2={y}
-            stroke={isBaseline ? "rgba(0,255,156,0.18)" : C_GRID}
-            strokeWidth={isBaseline ? 1 : 0.7}
-          />
-          <text
-            x={2}
-            y={y - 2}
-            fill={isBaseline ? "rgba(0,255,156,0.50)" : C_DIM}
-            fontSize={6}
-            fontFamily="var(--font-jetbrains-mono, monospace)"
-          >
-            {label}
-          </text>
-        </g>
-      ))}
-
-      {/* Baseline label on right */}
-      <text
-        x={CH_W - 2}
-        y={baselineY - 2}
-        fill="rgba(0,255,156,0.55)"
-        fontSize={5.5}
-        fontFamily="var(--font-jetbrains-mono, monospace)"
-        textAnchor="end"
+    <div className="relative mt-3 w-full" style={{ height: CH_H }}>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full overflow-visible"
       >
-        IDLE FLOOR
-      </text>
-
-      {/* Area under curve */}
-      {samples.length > 1 && <path d={area} fill={C_FILL} />}
-
-      {/* Peak dashed line */}
-      {peakW > BASELINE_W + 1 && (
-        <>
+        {marks.map((w) => (
+          <line
+            key={w}
+            x1={0}
+            x2={100}
+            y1={toY(w)}
+            y2={toY(w)}
+            stroke={w === BASELINE_W ? "rgba(0,255,156,0.25)" : C_GRID}
+            strokeWidth={1}
+            vectorEffect="non-scaling-stroke"
+          />
+        ))}
+        {samples.length > 1 && <path d={area} fill={C_FILL} />}
+        {peakW > BASELINE_W + 1 && (
           <line
             x1={0}
-            y1={peakY}
-            x2={CH_W}
-            y2={peakY}
+            x2={100}
+            y1={toY(peakW)}
+            y2={toY(peakW)}
             stroke={C_PEAK}
-            strokeWidth={0.9}
-            strokeDasharray="3 2"
+            strokeWidth={1}
+            strokeDasharray="4 3"
+            vectorEffect="non-scaling-stroke"
           />
-          <text
-            x={CH_W - 2}
-            y={peakY - 2}
-            fill={C_PEAK}
-            fontSize={5.5}
-            fontFamily="var(--font-jetbrains-mono, monospace)"
-            textAnchor="end"
-          >
-            PEAK
-          </text>
-        </>
-      )}
+        )}
+        {samples.length > 1 && (
+          <polyline
+            points={line}
+            fill="none"
+            stroke={C_LINE}
+            strokeWidth={1.5}
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        )}
+      </svg>
 
-      {/* Main waveform */}
-      {samples.length > 1 && (
-        <polyline
-          points={pts}
-          fill="none"
-          stroke={C_LINE}
-          strokeWidth={1.5}
-          strokeLinejoin="round"
-        />
+      {marks.map((w) => (
+        <span
+          key={w}
+          className="absolute left-0 -translate-y-full pb-0.5"
+          style={{
+            ...T_LABEL,
+            fontSize: 9,
+            top: `${toY(w)}%`,
+            color: w === BASELINE_W ? C_IDLE : C_DIM,
+          }}
+        >
+          {w.toFixed(0)} W{w === BASELINE_W ? " · idle" : ""}
+        </span>
+      ))}
+      {peakW > BASELINE_W + 1 && (
+        <span
+          className="absolute right-0 -translate-y-full pb-0.5"
+          style={{ ...T_LABEL, fontSize: 9, top: `${toY(peakW)}%`, color: C_PEAK }}
+        >
+          peak
+        </span>
       )}
+      <span
+        className="absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ left: "100%", top: `${toY(last)}%`, background: C_LINE }}
+      />
+    </div>
+  );
+}
 
-      {/* Live dot */}
-      {samples.length > 0 && (
-        <circle
-          cx={toX(samples.length - 1)}
-          cy={toY(samples[samples.length - 1])}
-          r={2.8}
-          fill={C_LINE}
-        />
-      )}
-    </svg>
+// ── Stacked bar: idle floor + movement on top ─────────────────────────────────
+function LoadBar({
+  idlePct,
+  movePct,
+  color,
+  height,
+}: {
+  idlePct: number;
+  movePct: number;
+  color: string;
+  height: number;
+}) {
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-full"
+      style={{ height, background: "rgba(255,255,255,0.05)" }}
+    >
+      <div
+        className="absolute inset-y-0 left-0"
+        style={{ width: `${idlePct}%`, background: color, opacity: 0.25 }}
+      />
+      <div
+        className="absolute inset-y-0"
+        style={{ left: `${idlePct}%`, width: `${movePct}%`, background: color }}
+      />
+    </div>
   );
 }
 
@@ -248,6 +273,13 @@ function calcGroupW(keys: readonly JointKey[], vel: Partial<Record<JointKey, num
   return { idleW, moveW, totalW: idleW + moveW };
 }
 
+const fmtDuration = (s: number) =>
+  `${Math.floor(s / 60)
+    .toString()
+    .padStart(2, "0")}:${Math.floor(s % 60)
+    .toString()
+    .padStart(2, "0")}`;
+
 // ── Public component ──────────────────────────────────────────────────────────
 interface PowerConsumptionProps {
   angles: JointAngles;
@@ -257,20 +289,35 @@ interface PowerConsumptionProps {
   onToggle?: () => void;
 }
 
+interface SessionStats {
+  seconds: number;
+  peakW: number;
+  avgW: number;
+  energyWh: number;
+}
+
+const freshSession = () => ({ start: performance.now(), energyJ: 0, peakW: BASELINE_W });
+
 export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumptionProps) {
   const prevAngles = useRef<JointAngles>(angles);
   const prevTime = useRef<number>(0);
   const smoothedW = useRef(BASELINE_W);
   const velocities = useRef<Partial<Record<JointKey, number>>>({});
+  const session = useRef({ start: 0, energyJ: 0, peakW: BASELINE_W });
   const anglesRef = useRef(angles);
   useLayoutEffect(() => {
     anglesRef.current = angles;
   }, [angles]);
 
   const [samples, setSamples] = useState<number[]>(() => Array(BUFFER_LEN).fill(BASELINE_W));
-  const [peakW, setPeakW] = useState(BASELINE_W);
   const [displayW, setDisplayW] = useState(BASELINE_W);
   const [velSnap, setVelSnap] = useState<Partial<Record<JointKey, number>>>({});
+  const [stats, setStats] = useState<SessionStats>({
+    seconds: 0,
+    peakW: BASELINE_W,
+    avgW: BASELINE_W,
+    energyWh: 0,
+  });
 
   useEffect(() => {
     const intervalMs = 1000 / SAMPLE_HZ;
@@ -279,6 +326,7 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
     const ALPHA_DOWN = 0.1; // wattage smoothing — slow decay
 
     prevTime.current = performance.now();
+    session.current = freshSession();
     let rafId: number;
     let lastTick = performance.now();
 
@@ -316,10 +364,21 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
         );
         const w = smoothedW.current;
 
+        // Session accumulators: energy integrates W·dt, average = energy / time.
+        const sess = session.current;
+        sess.energyJ += w * dt;
+        sess.peakW = Math.max(sess.peakW, w);
+        const seconds = (now - sess.start) / 1000;
+
         setSamples((p) => [...(p.length >= BUFFER_LEN ? p.slice(1) : p), w]);
-        setPeakW((p) => Math.max(p, w));
         setDisplayW(w);
         setVelSnap({ ...vel });
+        setStats({
+          seconds,
+          peakW: sess.peakW,
+          avgW: seconds > 0.5 ? sess.energyJ / seconds : w,
+          energyWh: sess.energyJ / 3600,
+        });
         lastTick = now;
       }
       rafId = requestAnimationFrame(tick);
@@ -329,29 +388,17 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
     return () => cancelAnimationFrame(rafId);
   }, []);
 
-  // Auto-reset peak after 30 s idle
-  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    idleTimer.current = setTimeout(() => setPeakW(BASELINE_W), 30_000);
-    return () => {
-      if (idleTimer.current) clearTimeout(idleTimer.current);
-    };
-  }, [displayW]);
+  const resetSession = () => {
+    session.current = freshSession();
+    setSamples(Array(BUFFER_LEN).fill(smoothedW.current));
+    setStats({ seconds: 0, peakW: smoothedW.current, avgW: smoothedW.current, energyWh: 0 });
+  };
 
   const movementW = displayW - BASELINE_W;
   const movePct = (movementW / PEAK_EXTRA_W) * 100;
+  const moveColor =
+    movePct > 80 ? "rgba(255,90,50,0.95)" : movePct > 50 ? "rgba(255,200,60,0.95)" : C_LINE;
 
-  const MONO: React.CSSProperties = {
-    fontFamily: "var(--font-jetbrains-mono, monospace)",
-    letterSpacing: "0.08em",
-  };
-  const LABEL: React.CSSProperties = {
-    ...MONO,
-    fontSize: 9,
-    color: "rgba(0,200,255,0.55)",
-    textTransform: "uppercase" as const,
-  };
   return (
     <HudPanel
       title="Power Draw"
@@ -362,188 +409,127 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
       onToggle={onToggle}
     >
       <div className="flex flex-col gap-4 overflow-auto p-3">
-        {/* ── Servo model badges ─────────────────────────── */}
-        <div className="flex gap-2">
-          <div
-            className="flex flex-col gap-0.5 rounded px-2 py-1"
-            style={{ border: "1px solid rgba(0,200,255,0.18)", background: "rgba(0,200,255,0.05)" }}
+        {/* ── Session ───────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <span style={T_LABEL}>
+            Session · <span style={{ color: C_VAL }}>{fmtDuration(stats.seconds)}</span>
+          </span>
+          <button
+            onClick={resetSession}
+            title="Reset peak, average, energy and the chart"
+            className="rounded-full px-3 py-1 transition-colors hover:bg-white/10"
+            style={{ ...T_LABEL, color: C_VAL, border: "1px solid rgba(255,255,255,0.12)" }}
           >
-            <span style={{ ...MONO, fontSize: 8, color: "rgba(0,200,255,0.50)" }}>LEGS × 8</span>
-            <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "rgba(0,200,255,0.95)" }}>
-              SG995
-            </span>
-            <span style={{ ...MONO, fontSize: 9, color: "rgba(0,200,255,0.65)" }}>
-              360 mA · 2 A stall
-            </span>
-          </div>
-          <div
-            className="flex flex-col gap-0.5 rounded px-2 py-1"
-            style={{
-              border: "1px solid rgba(180,120,255,0.18)",
-              background: "rgba(180,120,255,0.05)",
-            }}
-          >
-            <span style={{ ...MONO, fontSize: 8, color: "rgba(180,120,255,0.50)" }}>ARMS × 6</span>
-            <span
-              style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "rgba(180,120,255,0.95)" }}
-            >
-              S3003
-            </span>
-            <span style={{ ...MONO, fontSize: 9, color: "rgba(180,120,255,0.65)" }}>
-              150 mA · 600 mA stall
-            </span>
-          </div>
-          <div
-            className="ml-auto flex flex-col items-end gap-0.5 rounded px-2 py-1"
-            style={{ border: "1px solid rgba(0,255,156,0.15)", background: "rgba(0,255,156,0.04)" }}
-          >
-            <span style={{ ...MONO, fontSize: 8, color: "rgba(0,255,156,0.50)" }}>BUS</span>
-            <span style={{ ...MONO, fontSize: 11, fontWeight: 700, color: "rgba(0,255,156,0.90)" }}>
-              6.0 V
-            </span>
-            <span style={{ ...MONO, fontSize: 9, color: "rgba(0,255,156,0.55)" }}>fixed</span>
-          </div>
+            Reset
+          </button>
         </div>
 
-        {/* ── Big total + stats row ──────────────────────── */}
-        <div className="flex items-end justify-between">
-          <div className="flex flex-col gap-1">
-            <span style={LABEL}>Total draw</span>
-            <span
-              className="tabular-nums"
-              style={{ ...MONO, fontSize: 36, fontWeight: 700, color: C_VAL, lineHeight: 1 }}
-            >
+        {/* ── Live total ────────────────────────────────────── */}
+        <div className="flex items-end justify-between gap-3">
+          <div className="flex flex-col gap-1.5">
+            <span style={T_LABEL}>Total draw</span>
+            <span style={{ ...T_HERO, color: C_VAL }}>
               {displayW.toFixed(1)}
-              <span style={{ fontSize: 16, color: "rgba(0,200,255,0.55)", marginLeft: 5 }}>W</span>
+              <span style={{ ...T_UNIT, fontSize: 14 }}>W</span>
             </span>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex flex-col items-end gap-0">
-              <span style={LABEL}>Movement</span>
-              <span
-                className="tabular-nums"
-                style={{ ...MONO, fontSize: 16, fontWeight: 700, color: C_LINE }}
-              >
-                +{movementW.toFixed(1)} W
+          <div className="flex flex-col items-end gap-1.5">
+            <span style={T_LABEL}>Movement</span>
+            <span style={{ ...T_VALUE, color: moveColor }}>
+              +{movementW.toFixed(1)}
+              <span style={T_UNIT}>W · {movePct.toFixed(0)}%</span>
+            </span>
+          </div>
+        </div>
+
+        {/* ── Load bar ──────────────────────────────────────── */}
+        <div className="flex flex-col gap-1.5">
+          <LoadBar
+            idlePct={(BASELINE_W / MAX_W) * 100}
+            movePct={(movementW / MAX_W) * 100}
+            color={moveColor}
+            height={8}
+          />
+          <div className="flex justify-between">
+            <span style={{ ...T_LABEL, color: C_IDLE }}>Idle {BASELINE_W.toFixed(1)} W</span>
+            <span style={T_LABEL}>Max {MAX_W.toFixed(0)} W</span>
+          </div>
+        </div>
+
+        {/* ── Session stats ─────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Peak", value: stats.peakW.toFixed(1), unit: "W", color: C_PEAK },
+            { label: "Average", value: stats.avgW.toFixed(1), unit: "W", color: C_VAL },
+            { label: "Energy", value: stats.energyWh.toFixed(2), unit: "Wh", color: C_VAL },
+          ].map((s) => (
+            <div key={s.label} className="flex flex-col gap-1 rounded-xl px-2.5 py-2" style={CARD}>
+              <span style={T_LABEL}>{s.label}</span>
+              <span style={{ ...T_VALUE, color: s.color }}>
+                {s.value}
+                <span style={T_UNIT}>{s.unit}</span>
               </span>
             </div>
-            <div className="flex flex-col items-end gap-0">
-              <span style={LABEL}>Session peak</span>
-              <span
-                className="tabular-nums"
-                style={{ ...MONO, fontSize: 16, fontWeight: 700, color: C_PEAK }}
-              >
-                {peakW.toFixed(1)} W
-              </span>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* ── Load bar ───────────────────────────────────── */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-baseline justify-between">
-            <span style={{ ...LABEL }}>Idle floor</span>
-            <span style={{ ...MONO, fontSize: 10, color: "rgba(0,255,156,0.75)", fontWeight: 700 }}>
-              {BASELINE_W.toFixed(1)} W
-            </span>
-            <span style={LABEL}>Move +{movePct.toFixed(0)}%</span>
-            <span style={{ ...MONO, fontSize: 10, color: "rgba(0,200,255,0.70)", fontWeight: 700 }}>
-              max {MAX_W.toFixed(0)} W
-            </span>
-          </div>
-          <div
-            className="relative h-3 w-full overflow-hidden rounded"
-            style={{ background: "rgba(0,200,255,0.06)", border: "1px solid rgba(0,200,255,0.12)" }}
-          >
-            {/* Idle floor */}
-            <div
-              className="absolute top-0 left-0 h-full"
-              style={{
-                width: `${(BASELINE_W / MAX_W) * 100}%`,
-                background: "rgba(0,255,156,0.28)",
-              }}
-            />
-            {/* Movement */}
-            <div
-              className="absolute top-0 h-full transition-none"
-              style={{
-                left: `${(BASELINE_W / MAX_W) * 100}%`,
-                width: `${(movementW / MAX_W) * 100}%`,
-                background:
-                  movePct > 80
-                    ? "rgba(255,90,50,0.90)"
-                    : movePct > 50
-                      ? "rgba(255,200,60,0.90)"
-                      : "rgba(0,200,255,0.80)",
-              }}
-            />
-            {/* Boundary tick */}
-            <div
-              className="absolute top-0 h-full w-0.5"
-              style={{ left: `${(BASELINE_W / MAX_W) * 100}%`, background: "rgba(0,255,156,0.70)" }}
-            />
-          </div>
+        {/* ── Rolling chart ─────────────────────────────────── */}
+        <div className="flex flex-col gap-2">
+          <span style={T_LABEL}>
+            Last {WINDOW_S} s · {SAMPLE_HZ} Hz
+          </span>
+          <PowerChart samples={samples} peakW={stats.peakW} />
         </div>
 
-        {/* ── Rolling chart ──────────────────────────────── */}
-        <div className="flex flex-col gap-1.5">
-          <span style={LABEL}>5 s rolling · {SAMPLE_HZ} Hz</span>
-          <PowerChart samples={samples} peakW={peakW} />
-        </div>
-
-        {/* ── Per-group breakdown ────────────────────────── */}
-        <div className="flex flex-col gap-3">
-          <span style={LABEL}>Group breakdown</span>
+        {/* ── Per-group breakdown ───────────────────────────── */}
+        <div className="flex flex-col gap-2.5">
+          <span style={T_LABEL}>By group</span>
           {GROUPS.map((g) => {
             const { idleW, moveW, totalW } = calcGroupW(g.keys, velSnap);
-            const gMax =
-              g.keys.length * SUPPLY_V * (SERVO_TYPE[g.keys[0]].idle + SERVO_TYPE[g.keys[0]].extra);
-            const idlePct = (idleW / gMax) * 100;
-            const gMovePct = (moveW / gMax) * 100;
+            const spec = SERVO_TYPE[g.keys[0]];
+            const gMax = g.keys.length * SUPPLY_V * (spec.idle + spec.extra);
             return (
               <div key={g.label} className="flex flex-col gap-1">
-                <div className="flex items-baseline justify-between">
-                  <span style={{ ...MONO, fontSize: 10, fontWeight: 700, color: g.color }}>
-                    {g.label}
-                  </span>
-                  <span style={{ ...MONO, fontSize: 9, color: "rgba(0,200,255,0.55)" }}>
-                    {g.model}
-                  </span>
+                <div className="grid grid-cols-[1fr_auto_auto] items-baseline gap-3">
+                  <span style={{ ...T_LABEL, color: g.color }}>{g.label}</span>
+                  <span style={T_LABEL}>{g.model}</span>
                   <span
-                    className="tabular-nums"
-                    style={{ ...MONO, fontSize: 12, fontWeight: 700, color: g.color }}
+                    className="min-w-[4.5rem] text-right"
+                    style={{ ...T_VALUE, color: g.color }}
                   >
-                    {totalW.toFixed(1)} W
+                    {totalW.toFixed(1)}
+                    <span style={T_UNIT}>W</span>
                   </span>
                 </div>
-                <div
-                  className="relative h-2 w-full overflow-hidden rounded"
-                  style={{
-                    background: "rgba(0,200,255,0.06)",
-                    border: "1px solid rgba(0,200,255,0.10)",
-                  }}
-                >
-                  <div
-                    className="absolute top-0 left-0 h-full"
-                    style={{ width: `${idlePct}%`, background: g.color, opacity: 0.22 }}
-                  />
-                  <div
-                    className="absolute top-0 h-full transition-none"
-                    style={{
-                      left: `${idlePct}%`,
-                      width: `${gMovePct}%`,
-                      background: g.color,
-                      opacity: 0.9,
-                    }}
-                  />
-                  <div
-                    className="absolute top-0 h-full w-0.5"
-                    style={{ left: `${idlePct}%`, background: g.color, opacity: 0.55 }}
-                  />
-                </div>
+                <LoadBar
+                  idlePct={(idleW / gMax) * 100}
+                  movePct={(moveW / gMax) * 100}
+                  color={g.color}
+                  height={5}
+                />
               </div>
             );
           })}
+        </div>
+
+        {/* ── Servo specs ───────────────────────────────────── */}
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { label: "Legs × 8", model: "SG995", detail: "2 A stall", color: C_VAL },
+            { label: "Arms × 6", model: "S3003", detail: "0.6 A stall", color: C_ARMS },
+            { label: "Bus", model: `${SUPPLY_V.toFixed(1)} V`, detail: "fixed", color: C_PEAK },
+          ].map((c) => (
+            <div key={c.label} className="flex flex-col gap-1 rounded-xl px-2.5 py-2" style={CARD}>
+              <span style={T_LABEL}>{c.label}</span>
+              <span style={{ ...T_VALUE, color: c.color }}>{c.model}</span>
+              <span
+                className="whitespace-nowrap"
+                style={{ ...T_LABEL, fontSize: 9, letterSpacing: "0.04em", textTransform: "none" }}
+              >
+                {c.detail}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </HudPanel>

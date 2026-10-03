@@ -1,0 +1,129 @@
+{
+  "format": "nexus-pose-sequence",
+  "version": 1,
+  "robot": "optimus",
+  "name": "wave",
+  "loop": true,
+  "poses": [
+    {
+      "name": "Arms down",
+      "durationS": 1.2,
+      "angles": {
+        "l_hip_roll": 0,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0,
+        "r_hip_roll": 0,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": 1.3089969389957472,
+        "r_forearm_lat": 0
+      }
+    },
+    {
+      "name": "Raise",
+      "durationS": 1,
+      "angles": {
+        "l_hip_roll": 0.10471975511965978,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0.10471975511965978,
+        "r_hip_roll": 0.10471975511965978,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0.10471975511965978,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": -1.1344640137963142,
+        "r_forearm_lat": 0.3490658503988659
+      }
+    },
+    {
+      "name": "Wave out",
+      "durationS": 0.45,
+      "angles": {
+        "l_hip_roll": 0.10471975511965978,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0.10471975511965978,
+        "r_hip_roll": 0.10471975511965978,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0.10471975511965978,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": -1.1344640137963142,
+        "r_forearm_lat": -0.2617993877991494
+      }
+    },
+    {
+      "name": "Wave in",
+      "durationS": 0.45,
+      "angles": {
+        "l_hip_roll": 0.10471975511965978,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0.10471975511965978,
+        "r_hip_roll": 0.10471975511965978,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0.10471975511965978,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": -1.1344640137963142,
+        "r_forearm_lat": 0.6981317007977318
+      }
+    },
+    {
+      "name": "Wave out",
+      "durationS": 0.45,
+      "angles": {
+        "l_hip_roll": 0.10471975511965978,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0.10471975511965978,
+        "r_hip_roll": 0.10471975511965978,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0.10471975511965978,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": -1.1344640137963142,
+        "r_forearm_lat": -0.2617993877991494
+      }
+    },
+    {
+      "name": "Wave in",
+      "durationS": 0.45,
+      "angles": {
+        "l_hip_roll": 0.10471975511965978,
+        "l_hip_pitch": 0,
+        "l_knee": 0,
+        "l_ankle_roll": 0.10471975511965978,
+        "r_hip_roll": 0.10471975511965978,
+        "r_hip_pitch": 0,
+        "r_knee": 0,
+        "r_ankle_roll": 0.10471975511965978,
+        "l_shoulder_fb": 0,
+        "l_shoulder_lat": -1.3089969389957472,
+        "l_forearm_lat": 0,
+        "r_shoulder_fb": 0,
+        "r_shoulder_lat": -1.1344640137963142,
+        "r_forearm_lat": 0.6981317007977318
+      }
+    }
+  ]
+}

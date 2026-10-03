@@ -4,7 +4,7 @@ Digital twin for small servo robots: a 3D model you can pose by hand, live telem
 
 **Live demo: [robotics.amasetti.com](https://robotics.amasetti.com/robotics)** — runs in the browser as a simulator, no robot needed. Pose the model, build a pose sequence, switch robots; it also works on a phone.
 
-![Optimus in the robotics view: power draw, IMU, FreeRTOS and servo control around the 3D model](docs/robotics-ui.png)
+![Robotics view: dragging Optimus' arm to pose it, then playing a wave from the pose timeline while power draw and servo control follow](docs/robotics-ui.gif)
 
 Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Three.js.
 
@@ -18,6 +18,8 @@ Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Th
 - **Pose timeline** — build motions as a sequence of poses with editable transition times, play them once or in a loop, and export them for your own programs.
 - **Glass layout** — frosted sidebars you can resize (drag the pill grip, double-click to reset) and hide from the header; widths, pose, camera and robot choice are remembered.
 - **Phone layout** — the same features on a phone: the viewer on top and every panel, timeline included, in one bottom sheet you resize with its pill and hide from the header.
+
+<p align="center"><img src="docs/robotics-mobile.gif" width="260" alt="Phone layout: Optimus waving above the bottom sheet with the pose timeline and servo control"></p>
 
 ## Getting started
 
@@ -86,12 +88,16 @@ Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`
 
 ## Pose timeline
 
+<p align="center"><img src="docs/optimus-wave.gif" width="420" alt="Optimus waving: a looping six-pose sequence with sigmoid transitions"></p>
+
 The bar under the 3D view holds an animation — a named sequence of poses — for the current robot.
 
 - The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one; hovering any pose shows a button to append a copy of it — handy for repeating moves like a wave. Drag a pose to reorder it (it keeps its own transition time); whichever pose is first is the start.
 - The field between two poses is the transition time in seconds. Joints move between poses along a sigmoid curve — slow start, slow arrival — so the servos have time to settle.
 - **Play** runs the sequence once; with **Loop** on it returns to pose 1 (the `↺` field sets that return time) and repeats. Playback only moves the model, never the real robot.
 - The animation is saved in the browser per robot. **Export** downloads it as `<robot>_<name>_sequence.json` (e.g. `optimus_wave_sequence.json`); **Import** loads one back, taking its name from the file's `name` field or, if missing, from that file-name pattern.
+
+[`docs/optimus_wave_sequence.json`](docs/optimus_wave_sequence.json) is the wave above — import it on Optimus to try the timeline.
 
 Exported files are meant to be replayed by a program:
 
@@ -113,9 +119,38 @@ Exported files are meant to be replayed by a program:
 
 `trajectory.frames` is the whole motion pre-sampled at 50 Hz — one row per tick, angles in `servoOrder` — so a player can stream it to the servos without reimplementing the curve. To interpolate the keyframes yourself, each joint follows `a + (b − a) · s(u)`, where `u` is the fraction of the transition elapsed and `s` is the logistic `1 / (1 + e^(−k(u − ½)))` rescaled to run from 0 to 1.
 
-## Live robot link
+## Architecture
 
-Optimus' firmware exposes a WebSocket on port 81. It is plain `ws://`, so the link only runs when the UI is served over HTTP — locally or from the Docker stack. Served over HTTPS (a hosted demo) the UI skips it and works as a simulator. The UI reaches the robot two ways:
+Optimus' onboard computer is moving from an **ESP32-C3** to a **Raspberry Pi 4 running ROS 2**. The ESP32 was a big step up for the first stage — real-time servo control under FreeRTOS, IMU at 200 Hz, telemetry over WiFi — but the next steps (learned gaits, more sensors, logging and replaying sessions) need something more modular and a stronger processor. ROS 2 splits the robot into nodes that can be developed, swapped and simulated separately, and the Pi 4 has the headroom to run them on board.
+
+The UI doesn't change with the move: it already talks ROS 2 through rosbridge, and topic names come from the `link` section of `robot.json`.
+
+### Stage 2 — Raspberry Pi 4 + ROS 2 (in progress)
+
+```mermaid
+flowchart LR
+  subgraph PI["Optimus · Raspberry Pi 4 · ROS 2"]
+    direction TB
+    IMU["MPU6050 IMU"] -- I2C --> IMUN["imu node"]
+    CTRL["gait / control node"]
+    SERVO["servo driver node"] -- I2C --> PCA["PCA9685 · 14 servos"]
+    IMUN -- "/optimus/imu" --> CTRL
+    CTRL -- "/optimus/cmd/joint" --> SERVO
+    SERVO -- "/optimus/joint_states" --> CTRL
+    BRIDGE["rosbridge · wss :9090"]
+    IMUN --- BRIDGE
+    SERVO --- BRIDGE
+  end
+  subgraph WEB["Browser · futurespace-ui"]
+    ROS["lib/ros.tsx"] --> TWIN["3D twin · panels · pose timeline"]
+  end
+  BRIDGE <-->|"joint states, IMU / commands"| ROS
+  SIM["MuJoCo · same URDF"] -.-> TWIN
+```
+
+### Stage 1 — ESP32-C3 + FreeRTOS
+
+The firmware exposes a WebSocket on port 81; a ROS 2 bridge in Docker republishes it for rosbridge:
 
 ```
 Robot (ESP32-C3) ── ws://optimus.local:81 ──┬──────────────────────────────▶ Browser (lib/robot-ws.tsx)
@@ -128,6 +163,10 @@ Robot (ESP32-C3) ── ws://optimus.local:81 ──┬────────�
                                             ▼
                               rosbridge  wss://:9090 ───────────────────────▶ Browser (lib/ros.tsx)
 ```
+
+## Live robot link
+
+The firmware's WebSocket is plain `ws://`, so that link only runs when the UI is served over HTTP — locally or from the Docker stack. Served over HTTPS (the hosted demo) the UI skips it and works as a simulator.
 
 | Mode                  | Behaviour                                                                                                                                                                                         |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

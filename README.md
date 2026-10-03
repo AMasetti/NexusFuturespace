@@ -197,6 +197,8 @@ Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which 
 
 The release ships `futurespace-ui-vX.Y.Z.tar.gz` — the standalone Next.js bundle. Extract it and run `node server.js` (port via `PORT`, default 3000).
 
+Each release is also deployed to the [live demo](https://robotics.amasetti.com/robotics) on Vercel. Merges that don't release (docs, chore, …) don't deploy; pull requests get Vercel preview deployments. The deploy job needs the `VERCEL_TOKEN` secret and the `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` repository variables.
+
 ## Credits
 
 Spot Micro meshes by KDY0523, licensed CC BY 3.0 — see [`public/models/spotmicro/ATTRIBUTION.md`](public/models/spotmicro/ATTRIBUTION.md).

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Download, Play, Plus, Repeat, Square, Upload, X } from "lucide-react";
+import { CopyPlus, Download, Play, Plus, Repeat, Square, Upload, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_DURATION_S,
@@ -101,8 +101,8 @@ export function PoseTimeline({
   const setDuration = (i: number, d: number) =>
     onChange({ ...sequence, poses: poses.map((p, k) => (k === i ? { ...p, durationS: d } : p)) });
 
-  const addPose = () => {
-    const last = poses[poses.length - 1];
+  /** Appends a copy of pose `i` and selects it — handy for repeating moves in a loop. */
+  const appendCopy = (i: number) => {
     const next: Sequence = {
       ...sequence,
       poses: [
@@ -110,7 +110,7 @@ export function PoseTimeline({
         {
           id: newPoseId(),
           name: `Pose ${poses.length + 1}`,
-          angles: { ...last.angles },
+          angles: { ...poses[i].angles },
           durationS: DEFAULT_DURATION_S,
         },
       ],
@@ -226,14 +226,27 @@ export function PoseTimeline({
                     {i === 0 ? "start" : `t = ${times[i].toFixed(2)} s`}
                   </span>
                 </button>
-                {i > 0 && !playing && (
-                  <button
-                    onClick={() => removePose(i)}
-                    aria-label={`Remove ${p.name}`}
-                    className="mr-1.5 rounded-full p-1 text-white/40 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white/10 hover:text-rose-200"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                {!playing && (
+                  <div className="mr-1.5 flex flex-col opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <button
+                      onClick={() => appendCopy(i)}
+                      aria-label={`Copy ${p.name} to the end`}
+                      title={`Add a copy of ${p.name} at the end`}
+                      className="rounded-full p-1 text-white/40 hover:bg-white/10 hover:text-cyan-200"
+                    >
+                      <CopyPlus className="h-3 w-3" />
+                    </button>
+                    {i > 0 && (
+                      <button
+                        onClick={() => removePose(i)}
+                        aria-label={`Remove ${p.name}`}
+                        title={`Remove ${p.name}`}
+                        className="rounded-full p-1 text-white/40 hover:bg-white/10 hover:text-rose-200"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -251,7 +264,7 @@ export function PoseTimeline({
         )}
 
         <button
-          onClick={addPose}
+          onClick={() => appendCopy(poses.length - 1)}
           disabled={playing}
           aria-label="Add pose"
           title="Add a pose (copies the last one)"

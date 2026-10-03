@@ -85,7 +85,7 @@ Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`
 
 The bar under the 3D view holds a sequence of poses for the current robot.
 
-- The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one.
+- The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one; hovering any pose shows a button to append a copy of it — handy for repeating moves like a wave.
 - The field between two poses is the transition time in seconds. Joints move between poses along a sigmoid curve — slow start, slow arrival — so the servos have time to settle.
 - **Play** runs the sequence once; with **Loop** on it returns to pose 1 (the `↺` field sets that return time) and repeats. Playback only moves the model, never the real robot.
 - The sequence is saved in the browser per robot. **Export** downloads it as JSON; **Import** loads one back.

@@ -49,7 +49,7 @@ Each robot is a folder in `public/models/<id>/` with its URDF, meshes and a `rob
 | ------------- | ---------------------------------------------------------- | :-----: | :--------: |
 | Servo Control | `servos` (required)                                        |    ✓    |     ✓      |
 | Model         | always — counts come from the URDF, `sim` adds settings    |    ✓    |     ✓      |
-| Power Draw    | `power.busV` and a `type` from `servoTypes` on every servo |    ✓    |            |
+| Power Draw    | `power.busV` and a `type` from `servoTypes` on every servo |    ✓    |     ✓      |
 | IMU           | `imu` and a `link` (its data comes from the robot)         |    ✓    |            |
 | FreeRTOS      | `mcu.rtos`                                                 |    ✓    |            |
 | Take Control  | `link` — live WebSocket/ROS connection to the robot        |    ✓    |            |

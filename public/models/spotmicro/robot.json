@@ -14,7 +14,8 @@
           "joint": "front_left_shoulder",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "front_left_leg",
@@ -26,7 +27,8 @@
           "joint": "front_left_leg",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "front_left_foot",
@@ -38,7 +40,8 @@
           "joint": "front_left_foot",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "front_right_shoulder",
@@ -50,7 +53,8 @@
           "joint": "front_right_shoulder",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "front_right_leg",
@@ -62,7 +66,8 @@
           "joint": "front_right_leg",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "front_right_foot",
@@ -74,7 +79,8 @@
           "joint": "front_right_foot",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_left_shoulder",
@@ -86,7 +92,8 @@
           "joint": "rear_left_shoulder",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_left_leg",
@@ -98,7 +105,8 @@
           "joint": "rear_left_leg",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_left_foot",
@@ -110,7 +118,8 @@
           "joint": "rear_left_foot",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_right_shoulder",
@@ -122,7 +131,8 @@
           "joint": "rear_right_shoulder",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_right_leg",
@@ -134,7 +144,8 @@
           "joint": "rear_right_leg",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     },
     {
       "id": "rear_right_foot",
@@ -146,7 +157,17 @@
           "joint": "rear_right_foot",
           "scale": 1
         }
-      ]
+      ],
+      "type": "SG995"
     }
-  ]
+  ],
+  "servoTypes": {
+    "SG995": {
+      "idleA": 0.36,
+      "stallA": 2.0
+    }
+  },
+  "power": {
+    "busV": 6.0
+  }
 }

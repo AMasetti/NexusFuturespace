@@ -505,7 +505,7 @@ export function PowerConsumption({ def, angles, collapsed, onToggle }: PowerCons
         <div className="grid grid-cols-3 gap-2">
           {[
             ...pm.types.map((t, i) => ({
-              label: `${t.count} servos`,
+              label: `× ${t.count}`,
               model: t.name,
               detail: `${t.stallA} A stall`,
               color: GROUP_COLORS[i % GROUP_COLORS.length],

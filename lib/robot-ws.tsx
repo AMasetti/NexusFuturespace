@@ -75,6 +75,14 @@ export function RobotWsProvider({
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // The firmware serves plain ws://, which an HTTPS page may not open (the
+    // browser throws). Hosted over HTTPS the UI runs as a simulator instead.
+    if (window.location.protocol === "https:") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setStatus("disconnected");
+      return;
+    }
+
     const connect = () => {
       if (wsRef.current) {
         wsRef.current.onclose = null;

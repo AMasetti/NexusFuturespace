@@ -113,7 +113,7 @@ Exported files are meant to be replayed by a program:
 
 ## Live robot link
 
-Optimus' firmware exposes a WebSocket on port 81. The UI reaches it two ways:
+Optimus' firmware exposes a WebSocket on port 81. It is plain `ws://`, so the link only runs when the UI is served over HTTP — locally or from the Docker stack. Served over HTTPS (a hosted demo) the UI skips it and works as a simulator. The UI reaches the robot two ways:
 
 ```
 Robot (ESP32-C3) ── ws://optimus.local:81 ──┬──────────────────────────────▶ Browser (lib/robot-ws.tsx)

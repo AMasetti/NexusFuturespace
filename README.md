@@ -119,9 +119,38 @@ Exported files are meant to be replayed by a program:
 
 `trajectory.frames` is the whole motion pre-sampled at 50 Hz — one row per tick, angles in `servoOrder` — so a player can stream it to the servos without reimplementing the curve. To interpolate the keyframes yourself, each joint follows `a + (b − a) · s(u)`, where `u` is the fraction of the transition elapsed and `s` is the logistic `1 / (1 + e^(−k(u − ½)))` rescaled to run from 0 to 1.
 
-## Live robot link
+## Architecture
 
-Optimus' firmware exposes a WebSocket on port 81. It is plain `ws://`, so the link only runs when the UI is served over HTTP — locally or from the Docker stack. Served over HTTPS (a hosted demo) the UI skips it and works as a simulator. The UI reaches the robot two ways:
+Optimus' onboard computer is moving from an **ESP32-C3** to a **Raspberry Pi 4 running ROS 2**. The ESP32 was a big step up for the first stage — real-time servo control under FreeRTOS, IMU at 200 Hz, telemetry over WiFi — but the next steps (learned gaits, more sensors, logging and replaying sessions) need something more modular and a stronger processor. ROS 2 splits the robot into nodes that can be developed, swapped and simulated separately, and the Pi 4 has the headroom to run them on board.
+
+The UI doesn't change with the move: it already talks ROS 2 through rosbridge, and topic names come from the `link` section of `robot.json`.
+
+### Stage 2 — Raspberry Pi 4 + ROS 2 (in progress)
+
+```mermaid
+flowchart LR
+  subgraph PI["Optimus · Raspberry Pi 4 · ROS 2"]
+    direction TB
+    IMU["MPU6050 IMU"] -- I2C --> IMUN["imu node"]
+    CTRL["gait / control node"]
+    SERVO["servo driver node"] -- I2C --> PCA["PCA9685 · 14 servos"]
+    IMUN -- "/optimus/imu" --> CTRL
+    CTRL -- "/optimus/cmd/joint" --> SERVO
+    SERVO -- "/optimus/joint_states" --> CTRL
+    BRIDGE["rosbridge · wss :9090"]
+    IMUN --- BRIDGE
+    SERVO --- BRIDGE
+  end
+  subgraph WEB["Browser · futurespace-ui"]
+    ROS["lib/ros.tsx"] --> TWIN["3D twin · panels · pose timeline"]
+  end
+  BRIDGE <-->|"joint states, IMU / commands"| ROS
+  SIM["MuJoCo · same URDF"] -.-> TWIN
+```
+
+### Stage 1 — ESP32-C3 + FreeRTOS
+
+The firmware exposes a WebSocket on port 81; a ROS 2 bridge in Docker republishes it for rosbridge:
 
 ```
 Robot (ESP32-C3) ── ws://optimus.local:81 ──┬──────────────────────────────▶ Browser (lib/robot-ws.tsx)
@@ -134,6 +163,10 @@ Robot (ESP32-C3) ── ws://optimus.local:81 ──┬────────�
                                             ▼
                               rosbridge  wss://:9090 ───────────────────────▶ Browser (lib/ros.tsx)
 ```
+
+## Live robot link
+
+The firmware's WebSocket is plain `ws://`, so that link only runs when the UI is served over HTTP — locally or from the Docker stack. Served over HTTPS (the hosted demo) the UI skips it and works as a simulator.
 
 | Mode                  | Behaviour                                                                                                                                                                                         |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

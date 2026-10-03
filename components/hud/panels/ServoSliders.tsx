@@ -138,6 +138,11 @@ const JOINT_GROUPS: { label: string; sublabel: string; joints: JointDef[] }[] = 
   },
 ];
 
+/** Human-readable joint names, e.g. "Hip Pitch L". */
+export const JOINT_LABELS = Object.fromEntries(
+  JOINT_GROUPS.flatMap((g) => g.joints.map((j) => [j.key, j.label]))
+) as Record<keyof JointAngles, string>;
+
 interface ServoSlidersProps {
   angles: JointAngles;
   onChange: (angles: JointAngles) => void;

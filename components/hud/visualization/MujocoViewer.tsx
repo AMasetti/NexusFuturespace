@@ -1,12 +1,12 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import URDFLoader, { type URDFRobot as URDFRobotType } from "urdf-loader";
 import { STLLoader, OrbitControls as OrbitControlsImpl } from "three-stdlib";
-import type { JointAngles } from "@/components/hud/panels/ServoSliders";
+import { JOINT_LABELS, type JointAngles } from "@/components/hud/panels/ServoSliders";
 import type { CameraState } from "@/lib/persist";
 import { HudPanel } from "@/components/hud/core/HudPanel";
 
@@ -19,6 +19,9 @@ const MAT_BODY = new THREE.LineBasicMaterial({ color: "#00C8FF" });
 const MAT_JOINT = new THREE.LineBasicMaterial({ color: "#00FFFF" });
 const MAT_TENDON = new THREE.LineBasicMaterial({ color: "#00FF9C" });
 
+// Edge colour for the link under the cursor / being dragged.
+const MAT_ACTIVE = new THREE.LineBasicMaterial({ color: "#FFD166" });
+
 function pickEdgeMat(path: string) {
   const n = (path.split("/").pop() ?? "").toLowerCase();
   if (n.includes("knee") || n.includes("anckle") || n.includes("hip-l") || n.includes("hip-r"))
@@ -27,21 +30,173 @@ function pickEdgeMat(path: string) {
   return MAT_BODY;
 }
 
+// ─── Drag-to-rotate ───────────────────────────────────────────────────────────
+
+// Which servo turns when a link is grabbed. The URDF names are legacy
+// (Servo-Knee-*-Top is the hip pitch), and the parallelogram bars hang off
+// passive joints, so this follows what visibly moves each part.
+const LINK_TO_JOINT: Partial<Record<string, keyof JointAngles>> = {
+  "Showlder-L": "Servo-Showlder-L-Front-Back",
+  "Showlder-R": "Servo-Showlder-R-Front-Back",
+  "Arm-L": "Servo-Showlder-L-Inward-Outward",
+  "Arm-R": "Servo-Showlder-R-Inward-Outward",
+  "Forearm-L": "Servo-Forearm-L",
+  "Forearm-R": "Servo-Forearm-R",
+  "Hip-L": "Servo-Hip-L",
+  "Hip-R": "Servo-Hip-R",
+  "Knee-L": "Servo-Knee-L-Top",
+  "Knee-R": "Servo-Knee-R-Top",
+  "Sartorius-LT": "Servo-Knee-L-Top",
+  "Sartorius-RT": "Servo-Knee-R-Top",
+  "Tendon-LT": "Servo-Knee-L-Top",
+  "Tendon-RT": "Servo-Knee-R-Top",
+  "Sartorius-LB": "Servo-Knee-L-Bottom",
+  "Sartorius-RB": "Servo-Knee-R-Bottom",
+  "Tendon-LB": "Servo-Knee-L-Bottom",
+  "Tendon-RB": "Servo-Knee-R-Bottom",
+  "Anckle-L": "Servo-Knee-L-Bottom",
+  "Anckle-R": "Servo-Knee-R-Bottom",
+  "Feet-L": "Servo-Ankle-L",
+  "Feet-R": "Servo-Ankle-R",
+};
+
+// Sign between a JointAngles value and the URDF joint value (see useFrame below).
+const URDF_SIGN: Partial<Record<keyof JointAngles, number>> = {
+  "Servo-Knee-L-Top": -1,
+  "Servo-Knee-R-Top": -1,
+  "Servo-Knee-L-Bottom": -1,
+  "Servo-Ankle-L": -1,
+  "Servo-Showlder-R-Front-Back": -1,
+  "Servo-Showlder-L-Inward-Outward": -1,
+  "Servo-Forearm-L": -1,
+};
+
+// Same travel as the sliders: 0–180° display = ±90° around halt.
+const JOINT_LIMIT = H;
+
+export interface JointDragHandlers {
+  onDrag: (key: keyof JointAngles, rad: number, clientX: number, clientY: number) => void;
+  onEnd: (key: keyof JointAngles, rad: number) => void;
+}
+
+type URDFNode = THREE.Object3D & { isURDFLink?: boolean; isURDFJoint?: boolean };
+
+function linkOf(obj: THREE.Object3D | null): URDFNode | null {
+  let o = obj as URDFNode | null;
+  while (o && !o.isURDFLink) o = o.parent as URDFNode | null;
+  return o;
+}
+
+// Swap the edge material of a link's own meshes (not its child links).
+function highlightLink(link: URDFNode, on: boolean) {
+  for (const child of link.children as URDFNode[]) {
+    if (child.isURDFJoint) continue;
+    child.traverse((o) => {
+      if (o instanceof THREE.LineSegments) o.material = on ? MAT_ACTIVE : o.userData.baseMat;
+    });
+  }
+}
+
 // ─── URDF robot ───────────────────────────────────────────────────────────────
 
 function URDFRobot({
   controlsRef,
   anglesRef,
   initialCamera,
+  dragRef,
 }: {
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   anglesRef: React.RefObject<JointAngles | undefined>;
   initialCamera: CameraState | null;
+  dragRef: React.RefObject<JointDragHandlers | null>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const rootRef = useRef<THREE.Group>(null);
   const robotRef = useRef<URDFRobotType | null>(null);
-  const { camera } = useThree();
+  const hoverRef = useRef<URDFNode | null>(null);
+  const draggingRef = useRef(false);
+  const { camera, gl } = useThree();
+  // Canvas element in a ref: event handlers may mutate refs, not hook values.
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    canvasRef.current = gl.domElement;
+  }, [gl]);
+  const setCursor = (cursor: string) => {
+    if (canvasRef.current) canvasRef.current.style.cursor = cursor;
+  };
+
+  const setHover = (link: URDFNode | null) => {
+    if (hoverRef.current === link) return;
+    if (hoverRef.current) highlightLink(hoverRef.current, false);
+    hoverRef.current = link;
+    if (link) highlightLink(link, true);
+    setCursor(link ? "grab" : "");
+  };
+
+  const draggableLink = (obj: THREE.Object3D) => {
+    if (!dragRef.current) return null;
+    const link = linkOf(obj);
+    return link && LINK_TO_JOINT[link.name] ? link : null;
+  };
+
+  const onPointerMove = (e: ThreeEvent<PointerEvent>) => {
+    if (!draggingRef.current) setHover(draggableLink(e.object));
+  };
+
+  const onPointerOut = () => {
+    if (!draggingRef.current) setHover(null);
+  };
+
+  // Knob-style drag: the joint turns by the angle the cursor sweeps around the
+  // joint's on-screen pivot, so the part follows the mouse from any viewpoint.
+  const onPointerDown = (e: ThreeEvent<PointerEvent>) => {
+    const robot = robotRef.current;
+    const link = e.button === 0 ? draggableLink(e.object) : null;
+    const key = link ? LINK_TO_JOINT[link.name] : undefined;
+    const joint = key && robot?.joints[key];
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!link || !key || !joint || !rect) return;
+    e.stopPropagation();
+
+    const controls = controlsRef.current;
+    if (controls) controls.enabled = false;
+    draggingRef.current = true;
+    setHover(link);
+    setCursor("grabbing");
+
+    const pivot = joint.getWorldPosition(new THREE.Vector3());
+    const ndc = pivot.clone().project(camera);
+    const cx = rect.left + ((ndc.x + 1) / 2) * rect.width;
+    const cy = rect.top + ((1 - ndc.y) / 2) * rect.height;
+    // A positive turn about an axis pointing at the camera looks counter-clockwise.
+    const axis = joint.axis.clone().transformDirection(joint.matrixWorld);
+    const facing = axis.dot(camera.position.clone().sub(pivot)) >= 0 ? 1 : -1;
+    const sign = facing * (URDF_SIGN[key] ?? 1);
+
+    let last = Math.atan2(e.clientY - cy, e.clientX - cx);
+    let value = anglesRef.current?.[key] ?? 0;
+
+    const move = (ev: PointerEvent) => {
+      const a = Math.atan2(ev.clientY - cy, ev.clientX - cx);
+      let d = a - last;
+      if (d > PI) d -= 2 * PI;
+      if (d < -PI) d += 2 * PI;
+      last = a;
+      // Screen y points down, so a growing atan2 is clockwise: negate for CCW.
+      value = THREE.MathUtils.clamp(value - d * sign, -JOINT_LIMIT, JOINT_LIMIT);
+      dragRef.current?.onDrag(key, value, ev.clientX, ev.clientY);
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      if (controls) controls.enabled = true;
+      draggingRef.current = false;
+      setHover(null);
+      dragRef.current?.onEnd(key, value);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   useEffect(() => {
     const group = groupRef.current;
@@ -67,6 +222,7 @@ function URDFRobot({
           );
           const edges = new THREE.EdgesGeometry(geo, 15);
           const lines = new THREE.LineSegments(edges, pickEdgeMat(path));
+          lines.userData.baseMat = lines.material;
           const wrapper = new THREE.Group();
           wrapper.add(fill);
           wrapper.add(lines);
@@ -174,7 +330,12 @@ function URDFRobot({
 
   return (
     <group ref={rootRef}>
-      <group ref={groupRef} />
+      <group
+        ref={groupRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerOut={onPointerOut}
+      />
     </group>
   );
 }
@@ -186,11 +347,13 @@ function Scene({
   anglesRef,
   initialCamera,
   onCameraChange,
+  dragRef,
 }: {
   autoRotate: boolean;
   anglesRef: React.RefObject<JointAngles | undefined>;
   initialCamera: CameraState | null;
   onCameraChange: (state: CameraState) => void;
+  dragRef: React.RefObject<JointDragHandlers | null>;
 }) {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
@@ -243,7 +406,12 @@ function Scene({
         infiniteGrid
       />
 
-      <URDFRobot controlsRef={controlsRef} anglesRef={anglesRef} initialCamera={initialCamera} />
+      <URDFRobot
+        controlsRef={controlsRef}
+        anglesRef={anglesRef}
+        initialCamera={initialCamera}
+        dragRef={dragRef}
+      />
 
       <OrbitControls
         ref={controlsRef}
@@ -460,6 +628,8 @@ export function MujocoViewer({
   onCameraChange,
   compact = false,
   autoRotate: autoRotateProp,
+  onJointDrag,
+  onJointDragEnd,
 }: {
   className?: string;
   jointAngles?: JointAngles;
@@ -468,6 +638,10 @@ export function MujocoViewer({
   compact?: boolean;
   /** Controls rotation from outside (e.g. MujocoInfoPanel in a sidebar). */
   autoRotate?: boolean;
+  /** Enables grab-and-drag on the model's parts to turn the servo behind them. */
+  onJointDrag?: (key: keyof JointAngles, rad: number) => void;
+  /** Called on release with the final angle — use it to commit to the robot. */
+  onJointDragEnd?: (key: keyof JointAngles, rad: number) => void;
 }) {
   const [autoRotateState, setAutoRotate] = useState(false);
   const autoRotate = autoRotateProp ?? autoRotateState;
@@ -481,8 +655,43 @@ export function MujocoViewer({
 
   const handleCameraChange = (state: CameraState) => onCameraChange?.(state);
 
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [dragTip, setDragTip] = useState<{
+    key: keyof JointAngles;
+    deg: number;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Handlers live in a ref so the drag listeners always call the latest props.
+  const dragRef = useRef<JointDragHandlers | null>(null);
+  useEffect(() => {
+    dragRef.current = onJointDrag
+      ? {
+          onDrag: (key, rad, clientX, clientY) => {
+            onJointDrag(key, rad);
+            const r = wrapperRef.current?.getBoundingClientRect();
+            setDragTip({
+              key,
+              deg: Math.round(90 + (rad * 180) / PI),
+              x: clientX - (r?.left ?? 0),
+              y: clientY - (r?.top ?? 0),
+            });
+          },
+          onEnd: (key, rad) => {
+            setDragTip(null);
+            onJointDragEnd?.(key, rad);
+          },
+        }
+      : null;
+  }, [onJointDrag, onJointDragEnd]);
+
   return (
-    <div className={className} style={{ position: "relative", width: "100%", height: "100%" }}>
+    <div
+      ref={wrapperRef}
+      className={className}
+      style={{ position: "relative", width: "100%", height: "100%" }}
+    >
       <Canvas
         camera={{ position: [1.2, 1.4, 2.0], fov: 44 }}
         gl={{ antialias: true, alpha: true }}
@@ -494,8 +703,25 @@ export function MujocoViewer({
           anglesRef={anglesRef}
           initialCamera={initialCamera}
           onCameraChange={handleCameraChange}
+          dragRef={dragRef}
         />
       </Canvas>
+
+      {dragTip && (
+        <div
+          className="pointer-events-none absolute rounded-full px-3 py-1 font-mono text-[10px] tracking-widest whitespace-nowrap uppercase"
+          style={{
+            left: dragTip.x + 14,
+            top: dragTip.y - 28,
+            background: "rgba(2,11,20,0.75)",
+            border: "1px solid rgba(255,209,102,0.45)",
+            color: "#FFD166",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          {JOINT_LABELS[dragTip.key]} · {dragTip.deg}°
+        </div>
+      )}
 
       {!compact && (
         <SimInfoPanel autoRotate={autoRotate} onToggleRotate={() => setAutoRotate((r) => !r)} />

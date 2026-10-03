@@ -37,4 +37,3 @@ export { ActionBar } from "./panels/ActionBar";
 export { SensorInventoryPanel } from "./panels/SensorInventoryPanel";
 export type { SensorEntry } from "./panels/SensorInventoryPanel";
 export { RoboticsPanel } from "./panels/RoboticsPanel";
-export { FloatingPanel } from "./panels/FloatingPanel";

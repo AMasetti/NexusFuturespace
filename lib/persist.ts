@@ -1,7 +1,5 @@
 // ─── localStorage persistence helpers ────────────────────────────────────────
 
-import type { PanelRect, PanelId } from "./panels";
-
 export interface CameraState {
   px: number;
   py: number;
@@ -11,39 +9,7 @@ export interface CameraState {
   tz: number; // orbit target
 }
 
-const KEY_PANELS = "robotics:panels:v1";
 const KEY_CAMERA = "robotics:camera:v1";
-
-// Returns saved panels only if the saved set of IDs exactly matches
-// the expected active IDs. Any mismatch (panels added/removed) → null.
-export function loadPanels(activeIds: PanelId[]): PanelRect[] | null {
-  try {
-    const raw = localStorage.getItem(KEY_PANELS);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return null;
-    const saved = parsed as PanelRect[];
-
-    const savedIds = new Set(saved.map((p) => p.id));
-    const activeSet = new Set(activeIds);
-
-    // Reject if sets differ in any direction
-    if (savedIds.size !== activeSet.size) return null;
-    for (const id of savedIds) if (!activeSet.has(id)) return null;
-
-    return saved;
-  } catch {
-    return null;
-  }
-}
-
-export function savePanels(panels: PanelRect[]): void {
-  try {
-    localStorage.setItem(KEY_PANELS, JSON.stringify(panels));
-  } catch {
-    /* quota exceeded — ignore */
-  }
-}
 
 function isFiniteNum(v: unknown): v is number {
   return typeof v === "number" && isFinite(v);
@@ -188,14 +154,5 @@ export function saveRobot(robot: string): void {
     localStorage.setItem(KEY_ROBOT, robot);
   } catch {
     /* quota exceeded — ignore */
-  }
-}
-
-export function clearPersistedLayout(): void {
-  try {
-    localStorage.removeItem(KEY_PANELS);
-    localStorage.removeItem(KEY_CAMERA);
-  } catch {
-    /* ignore */
   }
 }

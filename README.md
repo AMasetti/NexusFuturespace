@@ -1,157 +1,152 @@
 # futurespace-ui
 
-Sci-fi HUD digital twin for the Optimus biped robot. Built with Next.js 16 (App Router), React 19, TypeScript, and Tailwind CSS v4.
+Digital twin for small servo robots: a 3D model you can pose by hand, live telemetry, and two-way control of the real robot from the browser. Ships with **Optimus**, a 14-servo biped with a live robot link, and **Spot Micro**, a 12-servo quadruped in simulation. Any robot with a URDF can be added with a single JSON file.
 
-Connects to the robot over **ROS 2 + rosbridge** — live IMU telemetry, real-time joint tracking, and bidirectional servo control from the browser.
+![Optimus in the robotics view: power draw, IMU, FreeRTOS and servo control around the 3D model](docs/robotics-ui.png)
 
-## Stack
+Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Three.js.
 
-| Layer      | Tech                                               |
-| ---------- | -------------------------------------------------- |
-| Framework  | Next.js 16 (App Router), React 19, TypeScript      |
-| Styling    | Tailwind CSS v4, custom HUD design tokens          |
-| 3D viewer  | Three.js / @react-three/fiber / drei, urdf-loader  |
-| ROS bridge | roslib (WebSocket client → rosbridge_suite)        |
-| UI extras  | Framer Motion, Recharts, dnd-kit, Radix UI, Lucide |
+## Features
 
-## Running locally (dev)
+- **3D model posed by hand** — hover a part to highlight it, then drag to turn the servo behind it. Linkages such as Optimus' leg parallelograms move together.
+- **Servo Control** — one slider per servo with ±5° steps, grouped per limb, mirrored live in the 3D model.
+- **Live robot link** — observe the robot's pose, take control to drive it, release to hand it back.
+- **Power Draw** — modelled current per servo group with session peak, average and energy, plus a reset.
+- **IMU, FreeRTOS and Model panels** — shown only for robots whose definition describes that hardware.
+- **Glass layout** — frosted sidebars you can resize (drag the pill grip, double-click to reset) and hide from the header; widths, pose, camera and robot choice are remembered.
+
+## Getting started
 
 ```bash
-cd futurespace-ui
 npm install
 npm run dev        # http://localhost:3000/robotics
 ```
 
-For live robot data, also run the Docker stack (see [../docker/](../docker/)).
+Without a robot everything works as a simulator: pose the model, read the power model, switch robots. To connect to Optimus, run the Docker stack (below) or point the UI at the robot with `NEXT_PUBLIC_ROBOT_HOST`.
+
+| Variable                 | Default                | Purpose                                                      |
+| ------------------------ | ---------------------- | ------------------------------------------------------------ |
+| `NEXT_PUBLIC_ROBOT_HOST` | `optimus.local`        | Robot firmware WebSocket host (port from `robot.json`)       |
+| `NEXT_PUBLIC_ROS_WS_URL` | `wss://localhost:9090` | rosbridge URL — baked in at build time, rebuild after change |
 
 ## Scripts
 
 ```bash
-npm run dev        # Dev server with hot reload
-npm run build      # Production build
-npm run lint       # ESLint
+npm run dev               # Dev server with hot reload
+npm run build             # Production build (standalone)
+npm run check             # tsc + eslint + robot definition validation
+npm run validate:robots   # Check every robot.json against its URDF
+npm run format            # Prettier
 ```
 
-## Docker deployment
+## Robots
 
-The production stack is two containers managed by `../docker/compose.yml`:
+Each robot is a folder in `public/models/<id>/` with its URDF, meshes and a `robot.json` that drives the whole UI for it. The robot picker in the header lists the ids in `public/models/index.json`.
+
+`robot.json` declares the servos (required) and, optionally, the hardware the UI knows about. Each panel appears only when the file defines what it needs:
+
+| Panel         | Needs                                                      | Optimus | Spot Micro |
+| ------------- | ---------------------------------------------------------- | :-----: | :--------: |
+| Servo Control | `servos` (required)                                        |    ✓    |     ✓      |
+| Model         | always — counts come from the URDF, `sim` adds settings    |    ✓    |     ✓      |
+| Power Draw    | `power.busV` and a `type` from `servoTypes` on every servo |    ✓    |            |
+| IMU           | `imu` and a `link` (its data comes from the robot)         |    ✓    |            |
+| FreeRTOS      | `mcu.rtos`                                                 |    ✓    |            |
+| Take Control  | `link` — live WebSocket/ROS connection to the robot        |    ✓    |            |
+
+Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`, so signs, offsets and linkages (several joints per one servo) are data, not code:
+
+```jsonc
+{
+  "id": "l_hip_pitch", // firmware joint name for robots with a link
+  "label": "Hip Pitch L",
+  "group": "Left Leg",
+  "channel": 13,
+  "limitsDeg": [-90, 90],
+  "joints": [
+    { "joint": "Unactuated-Knee-L-Top", "scale": -1 },
+    { "joint": "Unactuated-Tendon-L-Top", "scale": -1 },
+    { "joint": "Servo-Knee-L-Top", "scale": 1 },
+  ],
+  "pivot": "Unactuated-Knee-L-Top", // where the part turns when dragged in 3D
+  "type": "SG995",
+}
+```
+
+**Adding a robot:**
+
+1. Copy its URDF and meshes into `public/models/<id>/`, with mesh paths relative to the URDF.
+2. Write `robot.json` — [`spotmicro/`](public/models/spotmicro/robot.json) is a servos-only example, [`optimus/`](public/models/optimus/robot.json) uses every section.
+3. Add the id to `public/models/index.json`.
+4. Run `npm run validate:robots`. It checks the file against the schema in [`lib/robot-def.ts`](lib/robot-def.ts) and every joint and mesh against the URDF. CI runs it too.
+
+## Live robot link
+
+Optimus' firmware exposes a WebSocket on port 81. The UI reaches it two ways:
+
+```
+Robot (ESP32-C3) ── ws://optimus.local:81 ──┬──────────────────────────────▶ Browser (lib/robot-ws.tsx)
+                                            │                                  IMU, servo state, set_joints
+                                            ▼
+                              ros2-bridge (ROS 2 Humble)
+                                /optimus/joint_states, /optimus/imu/*  ◀── publishes
+                                /optimus/cmd/joint                     ──▶ subscribes
+                                            │
+                                            ▼
+                              rosbridge  wss://:9090 ───────────────────────▶ Browser (lib/ros.tsx)
+```
+
+| Mode                  | Behaviour                                                                                                                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Observe** (default) | Sliders and the 3D model follow the robot's live joint positions. Read-only.                                                                                                                      |
+| **Override**          | **Take Control** makes sliders and 3D drag interactive; each released slider or drag is sent to the robot. **Copy Pose** exports the pose as firmware `#define`s. **Release Control** hands back. |
+
+Topic names, the WebSocket port and the Copy Pose target all come from the `link` section of `robot.json`.
+
+## Docker
+
+The full stack — rosbridge and this UI — runs from the NexusRobotics workspace's `docker/compose.yml`:
 
 ```bash
-cd docker
-docker compose up --build
-# UI: http://localhost:3010/robotics
+make docker-ip     # resolve optimus.local → ROBOT_IP in docker/.env
+make docker-up     # UI → http://localhost:3001/robotics
 ```
 
-| Container        | Role                                                        |
-| ---------------- | ----------------------------------------------------------- |
-| `ros2-bridge`    | Connects to `ws://optimus.local:81`, publishes ROS 2 topics |
-| `futurespace-ui` | Next.js on :3000 + rosbridge (`wss://`) on :9090            |
-
-`NEXT_PUBLIC_ROS_WS_URL` is baked at build time — changing it requires `--build`.
-
-## Architecture
-
-```
-Robot (ESP32-C3)
-  ws://optimus.local:81   ← plain WS, LAN only
-        │
-        ▼
-  ros2-bridge container (ROS 2 Humble)
-        │  publishes
-        ├─ /optimus/imu/raw          (sensor_msgs/Imu)
-        ├─ /optimus/imu/orientation  (geometry_msgs/Vector3Stamped)
-        ├─ /optimus/imu/gravity      (geometry_msgs/Vector3Stamped)
-        └─ /optimus/joint_states     (sensor_msgs/JointState)
-        │  subscribes
-        ├─ /optimus/cmd/joint        → set_joint WS command
-        ├─ /optimus/cmd/neutral      → set_neutral WS command
-        └─ /optimus/cmd/calibrate_imu
-        │
-        ▼
-  rosbridge_suite   wss://:9090   ← TLS termination here
-        │
-        ▼
-  Browser — lib/ros.tsx (RosProvider + useRosTopic hooks)
-        │
-        ├─ IMU Live panel  — pitch, roll, yaw rate, accel/gyro, gravity arrow
-        ├─ Servo Control   — observe mode (tracks robot) / override mode (controls robot)
-        └─ Power Draw      — modelled current from joint velocity (MG995 physics)
-```
-
-## Control modes
-
-| Mode                  | Behaviour                                                                                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Observe** (default) | Sliders and 3D viewer track the robot's live joint set points. Read-only.                                                                                                                                 |
-| **Override**          | Click "Take Control" — sliders pre-load to the robot's current pose (zero-jerk), become interactive. Moving a slider publishes immediately to `/optimus/cmd/joint`. Click "Release Control" to hand back. |
-
-When `NEXT_PUBLIC_ROS_WS_URL` is unset or rosbridge is unreachable, the UI falls back to simulated data and all panels still work.
-
-## Routes
-
-| Route       | Purpose                                                                           |
-| ----------- | --------------------------------------------------------------------------------- |
-| `/robotics` | Main HUD canvas — draggable/resizable floating panels with live 3D Optimus viewer |
-| `/showcase` | Full component showcase — every HUD widget rendered for visual reference          |
+rosbridge uses a self-signed TLS certificate generated on first boot. Open `https://localhost:9090` once, accept the certificate, and reload the UI.
 
 ## Project structure
 
 ```
 app/
-  robotics/page.tsx       # Main HUD page — panels, control mode state machine
+  robotics/page.tsx         # Robotics view: robot picker, sidebars, live link
+  showcase/page.tsx         # Every HUD component, for visual reference
 components/hud/
-  core/                   # HudPanel, HudBadge, HudLabel, HudSeparator, HudStatusDot
-  data/                   # GaugeCircle, WaveformBar, HudProgressBar, LiveCounter
-  visualization/          # MujocoViewer, TopographyMap, ...
+  core/                     # HudPanel (+ glass surface), badges, labels, status dots
   panels/
-    ServoSliders.tsx      # 14-channel servo control (readOnly + headerExtra props)
-    PowerConsumption.tsx  # MG995/S3003 servo power model
-    FloatingPanel.tsx     # Drag/resize panel container
+    GlassSidebar.tsx        # Resizable, hideable frosted sidebar
+    ServoControl.tsx        # Sliders generated from robot.json
+    PowerConsumption.tsx    # Power model from robot.json servo types
+    MobileScrollLayout.tsx  # Phone layout
+  visualization/
+    MujocoViewer.tsx        # URDF viewer, drag-to-turn, Model panel
 lib/
-  ros.tsx                 # RosProvider, useRosTopic, useRosStatus, useRosPublish
-  panels.ts               # Panel layout types, IDs, initial positions
-  persist.ts              # localStorage helpers (panels, camera, joints)
-public/models/optimus/    # URDF + 24 STL meshes for the 3D viewer
+  robot-def.ts              # robot.json schema, validation, panel rules
+  use-robot-defs.ts         # Loads index.json and every robot.json
+  robot-ws.tsx, ros.tsx     # Robot link: firmware WebSocket and rosbridge
+  persist.ts                # localStorage: pose, camera, sidebars, robot
+public/models/
+  index.json                # Robots shown in the picker
+  optimus/, spotmicro/      # URDF + meshes + robot.json per robot
+scripts/validate-robots.mjs # CI check for robot definitions
 ```
 
-## HUD panels
+## Contributing
 
-| Panel               | Data source                                                                                             |
-| ------------------- | ------------------------------------------------------------------------------------------------------- |
-| IMU · MPU6050       | `/optimus/imu/orientation` + `/optimus/imu/raw` — pitch, roll, yaw rate, accel/gyro bars, gravity arrow |
-| FreeRTOS · ESP32-C3 | Static — task list, stack sizes, peripheral info (200 Hz IMU, 100 Hz CPG, 50 Hz telemetry)              |
-| Servo Control       | `/optimus/joint_states` in observe mode; publishes `/optimus/cmd/joint` in override mode                |
-| Power Draw          | Modelled from joint velocity using MG995 servo physics (idle 0.36 A → stall 2.0 A at 6 V)               |
-| Navigation Overlay  | Topographic map placeholder                                                                             |
-
-Panel positions, camera state, and joint angles persist to `localStorage`. **Reset Layout** in the header clears all saved state.
-
-## TLS
-
-rosbridge runs with a self-signed TLS cert generated on first container boot (`/etc/rosbridge-tls/`). On first use, visit `https://localhost:9090` in your browser, accept the cert, then reload the UI. You only need to do this once per browser profile.
-
-## Robots
-
-Every robot is a folder in `public/models/<id>/` with its URDF, meshes and a `robot.json` that drives the whole UI for it. The robot picker in the header lists the ids in `public/models/index.json`.
-
-`robot.json` declares the servos (required) and, optionally, the hardware the UI knows about. Each panel appears only when the file defines what it needs:
-
-| Panel         | Needs                                                      |
-| ------------- | ---------------------------------------------------------- |
-| Servo Control | `servos` (required)                                        |
-| Model         | always — counts come from the URDF, `sim` adds settings    |
-| Power Draw    | `power.busV` and a `type` from `servoTypes` on every servo |
-| IMU           | `imu` and a `link` (its data comes from the robot)         |
-| FreeRTOS      | `mcu.rtos`                                                 |
-| Take Control  | `link` — live WebSocket/ROS connection to the robot        |
-
-Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`, so signs, offsets and linkages (several joints per servo) are data, not code. `pivot` names the joint a part visibly turns around when dragged in 3D. For robots with a `link`, servo ids are the firmware joint names.
-
-To add a robot: copy its URDF and meshes into `public/models/<id>/` (relative mesh paths), write `robot.json` (see `optimus/` for every section, `spotmicro/` for a servos-only robot), add the id to `index.json`, then run `npm run validate:robots` — it checks the file against the schema in `lib/robot-def.ts` and every joint and mesh against the URDF. CI runs it too.
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/); the `commit-msg` hook ([`.husky/commit-msg`](.husky/commit-msg)) rejects anything else. Pull requests use the [template](.github/pull_request_template.md).
 
 ## Releases
 
-Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which picks the next version from the [Conventional Commits](https://www.conventionalcommits.org/) since the last `vX.Y.Z` tag:
+Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which picks the next version from the commits since the last `vX.Y.Z` tag:
 
 | Commit                                    | Bump  | Example                        |
 | ----------------------------------------- | ----- | ------------------------------ |
@@ -160,6 +155,8 @@ Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which 
 | `fix`, `perf`, `refactor`                 | patch | `fix(viewer): joint signs`     |
 | `chore`, `ci`, `docs`, `style`, `test`, … | none  | no release                     |
 
-The `commit-msg` hook ([`.husky/commit-msg`](.husky/commit-msg)) rejects any commit whose subject doesn't follow this format, so every commit counts toward the next version.
-
 The release ships `futurespace-ui-vX.Y.Z.tar.gz` — the standalone Next.js bundle. Extract it and run `node server.js` (port via `PORT`, default 3000).
+
+## Credits
+
+Spot Micro meshes by KDY0523, licensed CC BY 3.0 — see [`public/models/spotmicro/ATTRIBUTION.md`](public/models/spotmicro/ATTRIBUTION.md).

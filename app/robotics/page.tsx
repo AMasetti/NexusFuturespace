@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useLayoutEffect, useEffect } from "react";
+import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useIsMobile } from "@/lib/use-is-mobile";
 import { MobileScrollLayout } from "@/components/hud/panels/MobileScrollLayout";
 
@@ -13,8 +13,9 @@ import {
   HudProgressBar,
   TopographyMap,
   MujocoViewer,
+  MujocoInfoPanel,
 } from "@/components/hud";
-import { FloatingPanel } from "@/components/hud/panels/FloatingPanel";
+import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSidebar";
 import {
   ServoSliders,
   DEFAULT_JOINT_ANGLES,
@@ -27,27 +28,8 @@ import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { ROBOTICS_TASKS } from "@/lib/hud-data";
 import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
 import { RobotWsProvider, useRobotWs } from "@/lib/robot-ws";
-import {
-  type PanelId,
-  type PanelRect,
-  type Interaction,
-  type ResizeEdge,
-  GRID,
-  MIN_W,
-  MIN_H,
-  INITIAL_PANELS,
-  snapAligned,
-} from "@/lib/panels";
-import {
-  loadPanels,
-  savePanels,
-  loadCamera,
-  saveCamera,
-  loadJoints,
-  saveJoints,
-  clearPersistedLayout,
-  type CameraState,
-} from "@/lib/persist";
+import { type PanelId } from "@/lib/panels";
+import { loadCamera, saveCamera, loadJoints, saveJoints, type CameraState } from "@/lib/persist";
 
 // ─── FreeRTOS process monitor panel ──────────────────────────────────────────
 
@@ -526,6 +508,8 @@ function PanelContent({
           status="online"
           cornerBrackets
           className="h-full"
+          collapsed={collapsed}
+          onToggle={onToggle}
         >
           <div className="h-full overflow-hidden p-2">
             <TopographyMap
@@ -887,8 +871,6 @@ function RosJointSync({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RoboticsPage() {
-  const [panels, setPanels] = useState<PanelRect[]>(INITIAL_PANELS);
-  const [bgPos, setBgPos] = useState("0px 0px");
   const [jointAngles, setJointAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
   // committedAngles only updates on pointerUp — this is what gets published to the robot.
   const [committedAngles, setCommittedAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
@@ -951,20 +933,12 @@ export default function RoboticsPage() {
     alert(text);
   };
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const interaction = useRef<Interaction | null>(null);
-  const maxZ = useRef(10);
-  const originMod = useRef({ x: 0, y: 0 });
-  const pendingSave = useRef(false);
+  const [autoRotate, setAutoRotate] = useState(false);
 
-  // Load persisted layout after first mount (localStorage is client-only).
-  // useLayoutEffect runs synchronously after DOM mutation but before paint,
-  // which is the correct hook for reading localStorage to avoid a flash of
-  // default positions before the persisted layout is applied.
+  // Load persisted camera and joints after first mount (localStorage is client-only).
+  // useLayoutEffect runs before paint, so the restored pose shows without a flash.
   useLayoutEffect(() => {
-    const saved = loadPanels(INITIAL_PANELS.map((p) => p.id));
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved) setPanels(saved);
     setInitialCamera(loadCamera());
     const savedJoints = loadJoints();
     if (savedJoints) setJointAngles(savedJoints);
@@ -980,98 +954,6 @@ export default function RoboticsPage() {
     };
   }, [jointAngles]);
 
-  useLayoutEffect(() => {
-    const measure = () => {
-      if (!canvasRef.current) return;
-      const r = canvasRef.current.getBoundingClientRect();
-      const mx = r.left % GRID;
-      const my = r.top % GRID;
-      originMod.current = { x: mx, y: my };
-      const ox = (GRID - mx) % GRID;
-      const oy = (GRID - my) % GRID;
-      setBgPos(`${ox}px ${oy}px`);
-      setPanels((prev) =>
-        prev.map((p) => {
-          const x = Math.max(0, snapAligned(p.x, mx));
-          const y = Math.max(0, snapAligned(p.y, my));
-          const w = Math.max(MIN_W, snapAligned(p.x + p.w, mx) - x);
-          const h = Math.max(MIN_H, snapAligned(p.y + p.h, my) - y);
-          return { ...p, x, y, w, h };
-        })
-      );
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, []);
-
-  const bringToFront = useCallback((id: PanelId) => {
-    maxZ.current += 1;
-    const z = maxZ.current;
-    setPanels((prev) => prev.map((p) => (p.id === id ? { ...p, z } : p)));
-  }, []);
-
-  const startInteraction = useCallback(
-    (e: React.PointerEvent, id: PanelId, kind: Interaction["kind"], edge?: ResizeEdge) => {
-      canvasRef.current?.setPointerCapture(e.pointerId);
-      const p = panels.find((p) => p.id === id)!;
-      interaction.current = {
-        id,
-        kind,
-        edge,
-        mx0: e.clientX,
-        my0: e.clientY,
-        px0: p.x,
-        py0: p.y,
-        pw0: p.w,
-        ph0: p.h,
-      };
-      bringToFront(id);
-    },
-    [panels, bringToFront]
-  );
-
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    const ia = interaction.current;
-    if (!ia) return;
-    const dx = e.clientX - ia.mx0;
-    const dy = e.clientY - ia.my0;
-    setPanels((prev) =>
-      prev.map((p) => {
-        if (p.id !== ia.id) return p;
-        const { x: mx, y: my } = originMod.current;
-        if (ia.kind === "drag") {
-          return {
-            ...p,
-            x: Math.max(0, snapAligned(ia.px0 + dx, mx)),
-            y: Math.max(0, snapAligned(ia.py0 + dy, my)),
-          };
-        }
-        let w = p.w;
-        let h = p.h;
-        if (ia.edge === "right" || ia.edge === "corner") {
-          w = Math.max(MIN_W, snapAligned(ia.px0 + ia.pw0 + dx, mx) - p.x);
-        }
-        if (ia.edge === "bottom" || ia.edge === "corner") {
-          h = Math.max(MIN_H, snapAligned(ia.py0 + ia.ph0 + dy, my) - p.y);
-        }
-        return { ...p, w, h };
-      })
-    );
-  }, []);
-
-  const onPointerUp = useCallback(() => {
-    interaction.current = null;
-    pendingSave.current = true;
-  }, []);
-
-  // Save after React has committed the final panel state from the last move
-  useEffect(() => {
-    if (!pendingSave.current) return;
-    pendingSave.current = false;
-    savePanels(panels);
-  }, [panels]);
-
   const isMobile = useIsMobile();
 
   const panelContentProps = {
@@ -1084,6 +966,36 @@ export default function RoboticsPage() {
     onReleaseControl: handleReleaseControl,
     onCopyPose: handleCopyPose,
   };
+
+  const panelSection = (id: PanelId, extra?: Partial<GlassSection>): GlassSection => ({
+    id,
+    ...extra,
+    content: (collapsed, onToggle) => (
+      <PanelContent id={id} {...panelContentProps} collapsed={collapsed} onToggle={onToggle} />
+    ),
+  });
+
+  const leftSections: GlassSection[] = [
+    panelSection("imu-live"),
+    panelSection("system-metrics"),
+    {
+      id: "mujoco",
+      content: (collapsed, onToggle) => (
+        <MujocoInfoPanel
+          autoRotate={autoRotate}
+          onToggleRotate={() => setAutoRotate((r) => !r)}
+          collapsed={collapsed}
+          onToggle={onToggle}
+        />
+      ),
+    },
+    panelSection("power-draw"),
+  ];
+
+  const rightSections: GlassSection[] = [
+    panelSection("servo-control"),
+    panelSection("nav-overlay", { height: 320, defaultCollapsed: true }),
+  ];
 
   const robotHost = process.env.NEXT_PUBLIC_ROBOT_HOST ?? "optimus.local";
 
@@ -1170,13 +1082,13 @@ export default function RoboticsPage() {
           />
         )}
 
-        {/* ── Desktop layout (unchanged) ──────────────────────────────── */}
+        {/* ── Desktop layout: glass sidebars around the 3D viewer ─────── */}
         {isMobile !== true && (
-          <div className="flex h-screen flex-col gap-2 overflow-hidden p-2">
+          <div className="glass-backdrop flex h-screen flex-col gap-3 overflow-hidden p-3">
             {/* ── TLS cert trust prompt ─────────────────────────────────── */}
             <TrustCertBanner />
             {/* ── Header ───────────────────────────────────────────────── */}
-            <div className="flex shrink-0 items-center justify-between px-1 py-0.5">
+            <header className="glass-panel flex shrink-0 items-center justify-between rounded-2xl px-5 py-3">
               <div className="flex items-center gap-3">
                 <HudStatusDot status="online" size="md" pulse />
                 <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
@@ -1187,56 +1099,25 @@ export default function RoboticsPage() {
               <div className="flex items-center gap-4">
                 <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
                 <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
-                <div className="bg-hud-border h-4 w-px" />
+                <div className="h-4 w-px bg-white/10" />
                 <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
-                <div className="bg-hud-border h-4 w-px" />
-                <button
-                  onClick={() => {
-                    clearPersistedLayout();
-                    setPanels(INITIAL_PANELS);
-                  }}
-                  className="border-hud-border/50 text-hud-text-dim hover:border-hud-primary hover:text-hud-primary rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-                  style={{ border: "1px solid" }}
-                >
-                  Reset Layout
-                </button>
               </div>
-            </div>
+            </header>
 
-            {/* ── Canvas ───────────────────────────────────────────────── */}
-            <div
-              ref={canvasRef}
-              className="relative min-h-0 flex-1 overflow-hidden select-none"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle, rgba(13,74,107,0.55) 1px, transparent 1px)",
-                backgroundSize: `${GRID}px ${GRID}px`,
-                backgroundPosition: bgPos,
-              }}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
-              onPointerLeave={onPointerUp}
-            >
-              {/* 3D robot viewer — full canvas, behind floating panels */}
-              <div style={{ position: "absolute", inset: 0, pointerEvents: "auto", zIndex: 0 }}>
+            <div className="flex min-h-0 flex-1 gap-3">
+              <GlassSidebar sections={leftSections} />
+
+              <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
                 <MujocoViewer
+                  compact
+                  autoRotate={autoRotate}
                   jointAngles={jointAngles}
                   initialCamera={initialCamera}
                   onCameraChange={saveCamera}
                 />
-              </div>
+              </main>
 
-              {panels.map((panel) => (
-                <FloatingPanel
-                  key={panel.id}
-                  panel={panel}
-                  onDragStart={(e, id) => startInteraction(e, id, "drag")}
-                  onResizeStart={(e, id, edge) => startInteraction(e, id, "resize", edge)}
-                  onFocus={bringToFront}
-                >
-                  <PanelContent id={panel.id} {...panelContentProps} />
-                </FloatingPanel>
-              ))}
+              <GlassSidebar sections={rightSections} />
             </div>
           </div>
         )}

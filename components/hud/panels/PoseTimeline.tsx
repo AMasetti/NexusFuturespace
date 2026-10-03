@@ -278,6 +278,7 @@ export function PoseTimeline({
   onExport,
   onImport,
   message,
+  embedded = false,
 }: {
   sequence: Sequence;
   selected: number;
@@ -291,6 +292,8 @@ export function PoseTimeline({
   onExport: () => void;
   onImport: (file: File) => void;
   message?: string | null;
+  /** Inside another glass surface (mobile sheet): a card, without its own blur. */
+  embedded?: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -398,7 +401,10 @@ export function PoseTimeline({
   return (
     <section
       aria-label="Pose timeline"
-      className="glass-panel flex shrink-0 flex-col gap-3 rounded-3xl p-3"
+      className={cn(
+        "flex shrink-0 flex-col gap-3 p-3",
+        embedded ? "glass-card rounded-2xl" : "glass-panel rounded-3xl"
+      )}
     >
       {/* ── Controls ─────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-2">

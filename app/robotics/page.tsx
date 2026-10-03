@@ -2,7 +2,7 @@
 
 import { useState, useRef, useLayoutEffect, useEffect } from "react";
 import { useIsMobile } from "@/lib/use-is-mobile";
-import { MobileScrollLayout } from "@/components/hud/panels/MobileScrollLayout";
+import { GlassBottomSheet } from "@/components/hud/panels/GlassBottomSheet";
 
 import {
   HudBadge,
@@ -14,7 +14,7 @@ import {
   type ModelInfo,
 } from "@/components/hud";
 import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSidebar";
-import { Check, ChevronDown, PanelLeft, PanelRight } from "lucide-react";
+import { Check, ChevronDown, PanelBottom, PanelLeft, PanelRight } from "lucide-react";
 import { ServoControl } from "@/components/hud/panels/ServoControl";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { PoseTimeline } from "@/components/hud/panels/PoseTimeline";
@@ -553,16 +553,16 @@ function SidebarToggle({
   open,
   onClick,
 }: {
-  side: "left" | "right";
+  side: "left" | "right" | "bottom";
   open: boolean;
   onClick: () => void;
 }) {
-  const Icon = side === "left" ? PanelLeft : PanelRight;
+  const Icon = { left: PanelLeft, right: PanelRight, bottom: PanelBottom }[side];
   return (
     <button
       onClick={onClick}
-      title={`${open ? "Hide" : "Show"} ${side} sidebar`}
-      aria-label={`${open ? "Hide" : "Show"} ${side} sidebar`}
+      title={`${open ? "Hide" : "Show"} ${side === "bottom" ? "panels" : `${side} sidebar`}`}
+      aria-label={`${open ? "Hide" : "Show"} ${side === "bottom" ? "panels" : `${side} sidebar`}`}
       aria-pressed={open}
       className={
         "rounded-xl p-2 transition-colors hover:bg-white/10 " +
@@ -920,6 +920,7 @@ export default function RoboticsPage() {
   const [autoRotate, setAutoRotate] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(true);
   // Pose timeline: sliders and 3D drag edit the selected pose; playback drives `angles`.
   const [sequence, setSequence] = useState<Sequence | null>(null);
   const [selectedPose, setSelectedPose] = useState(0);
@@ -943,6 +944,10 @@ export default function RoboticsPage() {
     saveSidebarOpen("right", !rightOpen);
     setRightOpen(!rightOpen);
   };
+  const toggleSheet = () => {
+    saveSidebarOpen("bottom", !sheetOpen);
+    setSheetOpen(!sheetOpen);
+  };
 
   // Restore UI preferences after first mount (localStorage is client-only).
   useLayoutEffect(() => {
@@ -950,6 +955,7 @@ export default function RoboticsPage() {
     setRobotId(loadRobot());
     setLeftOpen(loadSidebarOpen("left") ?? true);
     setRightOpen(loadSidebarOpen("right") ?? true);
+    setSheetOpen(loadSidebarOpen("bottom") ?? true);
   }, []);
 
   // Whenever the robot changes: restore its sequence and camera, drop live control.
@@ -1169,6 +1175,42 @@ export default function RoboticsPage() {
     />
   );
 
+  const banners = (
+    <>
+      {/* ── TLS cert trust prompt ─────────────────────────────────── */}
+      {def.link?.ros && <TrustCertBanner />}
+      {errors.length > 0 && (
+        <div className="shrink-0 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 font-mono text-[11px] text-amber-200/90">
+          Some robot definitions failed to load: {errors.join(" · ")}
+        </div>
+      )}
+    </>
+  );
+
+  const timeline = (embedded: boolean) =>
+    sequence && (
+      <PoseTimeline
+        sequence={sequence}
+        selected={selectedPose}
+        onSelect={(i, next) => showPose(next ?? sequence, i)}
+        onChange={setSequence}
+        playing={playing}
+        time={playing ? playTime : (poseTimes(sequence)[selectedPose] ?? 0)}
+        onPlay={() => {
+          setPlayTime(0);
+          setPlaying(true);
+        }}
+        onStop={() => {
+          setPlaying(false);
+          showPose(sequence, selectedPose);
+        }}
+        onExport={exportTimeline}
+        onImport={importTimeline}
+        message={timelineMsg}
+        embedded={embedded}
+      />
+    );
+
   return (
     <LinkProviders key={def.id} def={def}>
       {def.link && (
@@ -1196,34 +1238,43 @@ export default function RoboticsPage() {
         </>
       )}
 
-      {/* ── Mobile layout ───────────────────────────────────────────── */}
+      {/* ── Mobile layout: viewer on top, every panel in one bottom sheet ── */}
       {isMobile === true && (
-        <MobileScrollLayout
-          viewer={viewer}
-          panels={present([
-            imuSection,
-            servoSection,
-            rtosSection && { ...rtosSection, defaultCollapsed: true },
-            powerSection && { ...powerSection, defaultCollapsed: true },
-            { ...modelSection, defaultCollapsed: true },
-          ]).map((s) => ({
-            id: s.id,
-            defaultCollapsed: s.defaultCollapsed ?? false,
-            content: s.content,
-          }))}
-        />
+        <div className="glass-backdrop flex h-dvh flex-col gap-2 overflow-hidden p-2">
+          {banners}
+          <header className="glass-panel relative z-30 flex shrink-0 items-center justify-between gap-2 rounded-2xl px-2 py-1.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <HudStatusDot status="online" size="sm" pulse />
+              <span className="font-display text-hud-primary text-base font-bold tracking-[0.2em] uppercase">
+                Nexus
+              </span>
+              <RobotPicker robots={defs ?? []} value={def.id} onChange={selectRobot} />
+            </div>
+            <SidebarToggle side="bottom" open={sheetOpen} onClick={toggleSheet} />
+          </header>
+
+          <main className="glass-panel relative min-h-0 flex-1 overflow-hidden rounded-3xl">
+            {viewer}
+          </main>
+
+          <GlassBottomSheet
+            open={sheetOpen}
+            sections={present([
+              !!sequence && { id: "timeline", content: () => timeline(true) },
+              servoSection,
+              imuSection,
+              powerSection && { ...powerSection, defaultCollapsed: true },
+              rtosSection && { ...rtosSection, defaultCollapsed: true },
+              { ...modelSection, defaultCollapsed: true },
+            ])}
+          />
+        </div>
       )}
 
       {/* ── Desktop layout: glass sidebars around the 3D viewer ─────── */}
       {isMobile !== true && (
         <div className="glass-backdrop flex h-screen flex-col gap-3 overflow-hidden p-3">
-          {/* ── TLS cert trust prompt ─────────────────────────────────── */}
-          {def.link?.ros && <TrustCertBanner />}
-          {errors.length > 0 && (
-            <div className="shrink-0 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 font-mono text-[11px] text-amber-200/90">
-              Some robot definitions failed to load: {errors.join(" · ")}
-            </div>
-          )}
+          {banners}
           {/* ── Header ───────────────────────────────────────────────── */}
           {/* z-30: keeps the robot menu above the sidebars, which stack later */}
           <header className="glass-panel relative z-30 flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
@@ -1246,27 +1297,7 @@ export default function RoboticsPage() {
               <main className="glass-panel relative min-h-0 flex-1 overflow-hidden rounded-3xl">
                 {viewer}
               </main>
-              {sequence && (
-                <PoseTimeline
-                  sequence={sequence}
-                  selected={selectedPose}
-                  onSelect={(i, next) => showPose(next ?? sequence, i)}
-                  onChange={setSequence}
-                  playing={playing}
-                  time={playing ? playTime : (poseTimes(sequence)[selectedPose] ?? 0)}
-                  onPlay={() => {
-                    setPlayTime(0);
-                    setPlaying(true);
-                  }}
-                  onStop={() => {
-                    setPlaying(false);
-                    showPose(sequence, selectedPose);
-                  }}
-                  onExport={exportTimeline}
-                  onImport={importTimeline}
-                  message={timelineMsg}
-                />
-              )}
+              {timeline(false)}
             </div>
 
             <GlassSidebar side="right" open={rightOpen} sections={rightSections} />

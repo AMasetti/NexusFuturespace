@@ -695,7 +695,8 @@ export function MujocoViewer({
       <Canvas
         camera={{ position: [1.2, 1.4, 2.0], fov: 44 }}
         gl={{ antialias: true, alpha: true }}
-        shadows
+        // PCFShadowMap: three r18x deprecates the PCFSoft type `shadows` defaults to.
+        shadows="percentage"
         style={{ display: "block", width: "100%", height: "100%", background: "transparent" }}
       >
         <Scene

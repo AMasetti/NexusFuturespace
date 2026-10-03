@@ -92,9 +92,21 @@ export function loadServoAngles(robot: string, servoIds: string[]): Record<strin
   }
 }
 
-export function saveServoAngles(robot: string, angles: Record<string, number>): void {
+// Pose sequence per robot (raw JSON; lib/sequence.ts validates it on load).
+const KEY_SEQUENCE = "robotics:sequence:v1";
+
+export function loadSequenceRaw(robot: string): unknown {
   try {
-    localStorage.setItem(`${KEY_SERVOS}:${robot}`, JSON.stringify(angles));
+    const raw = localStorage.getItem(`${KEY_SEQUENCE}:${robot}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSequenceRaw(robot: string, sequence: unknown): void {
+  try {
+    localStorage.setItem(`${KEY_SEQUENCE}:${robot}`, JSON.stringify(sequence));
   } catch {
     /* quota exceeded — ignore */
   }

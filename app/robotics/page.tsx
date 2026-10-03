@@ -17,6 +17,16 @@ import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSi
 import { Check, ChevronDown, PanelLeft, PanelRight } from "lucide-react";
 import { ServoControl } from "@/components/hud/panels/ServoControl";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
+import { PoseTimeline } from "@/components/hud/panels/PoseTimeline";
+import {
+  exportSequence,
+  parseSequence,
+  poseTimes,
+  sampleAt,
+  singlePoseSequence,
+  totalDuration,
+  type Sequence,
+} from "@/lib/sequence";
 import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
 import { RobotWsProvider, useRobotWs } from "@/lib/robot-ws";
 import { useRobotDefs } from "@/lib/use-robot-defs";
@@ -35,7 +45,8 @@ import {
   loadCamera,
   saveCamera,
   loadServoAngles,
-  saveServoAngles,
+  loadSequenceRaw,
+  saveSequenceRaw,
   loadSidebarOpen,
   saveSidebarOpen,
   loadRobot,
@@ -450,6 +461,7 @@ function LiveServoControl({
   onTakeControl,
   onReleaseControl,
   onCopyPose,
+  locked = false,
   collapsed,
   onToggle,
 }: {
@@ -457,6 +469,8 @@ function LiveServoControl({
   angles: ServoAngles;
   onAnglesChange: (a: ServoAngles) => void;
   onAnglesCommit: (a: ServoAngles) => void;
+  /** Timeline playback owns the pose: sliders show it but can't edit. */
+  locked?: boolean;
   controlMode: "observe" | "override";
   robotConnected: boolean;
   onTakeControl: () => void;
@@ -468,14 +482,14 @@ function LiveServoControl({
   const rosStatus = useRosStatus();
   const isConnected = hasLink(def) && (rosStatus === "connected" || robotConnected);
   const isOverride = controlMode === "override";
-  const canDrive = !isConnected || isOverride;
+  const canDrive = !locked && (!isConnected || isOverride);
   return (
     <ServoControl
       def={def}
       angles={angles}
       onChange={canDrive ? onAnglesChange : () => {}}
       onCommit={canDrive ? onAnglesCommit : undefined}
-      readOnly={isConnected && !isOverride}
+      readOnly={locked || (isConnected && !isOverride)}
       collapsed={collapsed}
       onToggle={onToggle}
       headerExtra={
@@ -663,7 +677,9 @@ function DraggableViewer({
   autoRotate,
   initialCamera,
   onModelInfo,
+  locked = false,
 }: {
+  locked?: boolean;
   def: RobotDef;
   angles: ServoAngles;
   onAnglesChange: (a: ServoAngles) => void;
@@ -676,7 +692,7 @@ function DraggableViewer({
 }) {
   const rosStatus = useRosStatus();
   const connected = hasLink(def) && (rosStatus === "connected" || robotConnected);
-  const canDrive = !connected || controlMode === "override";
+  const canDrive = !locked && (!connected || controlMode === "override");
 
   return (
     <MujocoViewer
@@ -902,6 +918,16 @@ export default function RoboticsPage() {
   const [autoRotate, setAutoRotate] = useState(false);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  // Pose timeline: sliders and 3D drag edit the selected pose; playback drives `angles`.
+  const [sequence, setSequence] = useState<Sequence | null>(null);
+  const [selectedPose, setSelectedPose] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [playTime, setPlayTime] = useState(0);
+  const [timelineMsg, setTimelineMsg] = useState<string | null>(null);
+  const sequenceRef = useRef<Sequence | null>(null);
+  useEffect(() => {
+    sequenceRef.current = sequence;
+  }, [sequence]);
 
   const selectRobot = (id: string) => {
     saveRobot(id);
@@ -924,17 +950,32 @@ export default function RoboticsPage() {
     setRightOpen(loadSidebarOpen("right") ?? true);
   }, []);
 
-  // Whenever the robot changes: restore its saved pose and camera, drop live control.
+  // Whenever the robot changes: restore its sequence and camera, drop live control.
   useLayoutEffect(() => {
     if (!def) return;
-    const saved =
-      loadServoAngles(
-        def.id,
-        def.servos.map((s) => s.id)
-      ) ?? zeroAngles(def);
+    let seq: Sequence;
+    try {
+      const raw = loadSequenceRaw(def.id);
+      // No saved sequence yet: the pose saved before timelines existed becomes pose 1.
+      seq = raw
+        ? parseSequence(raw, def)
+        : singlePoseSequence(
+            loadServoAngles(
+              def.id,
+              def.servos.map((s) => s.id)
+            ) ?? zeroAngles(def)
+          );
+    } catch {
+      seq = singlePoseSequence(zeroAngles(def));
+    }
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAngles(saved);
-    setCommittedAngles(saved);
+    setSequence(seq);
+    setSelectedPose(0);
+    setPlaying(false);
+    setPlayTime(0);
+    setTimelineMsg(null);
+    setAngles(seq.poses[0].angles);
+    setCommittedAngles(seq.poses[0].angles);
     setAnglesFor(def.id);
     setModelInfo(null);
     setControlMode("observe");
@@ -942,12 +983,42 @@ export default function RoboticsPage() {
     setInitialCamera(loadCamera(def.id));
   }, [def]);
 
-  // Save the pose on change, debounced to avoid hammering localStorage on every slider tick.
+  // Save the sequence on change, debounced to avoid hammering localStorage on every slider tick.
   useEffect(() => {
-    if (!def || anglesFor !== def.id) return;
-    const t = setTimeout(() => saveServoAngles(def.id, angles), 500);
+    if (!def || !sequence || anglesFor !== def.id) return;
+    const t = setTimeout(() => saveSequenceRaw(def.id, { robot: def.id, ...sequence }), 500);
     return () => clearTimeout(t);
-  }, [angles, def, anglesFor]);
+  }, [sequence, def, anglesFor]);
+
+  // Playback: interpolate every frame; at the end (no loop) rest on the last pose.
+  useEffect(() => {
+    if (!playing || !def) return;
+    const ids = def.servos.map((s) => s.id);
+    const start = performance.now();
+    let raf = 0;
+    const tick = (now: number) => {
+      const seq = sequenceRef.current;
+      if (!seq) return;
+      const total = totalDuration(seq);
+      let t = (now - start) / 1000;
+      if (t >= total) {
+        if (seq.loop && total > 0) t %= total;
+        else {
+          const last = seq.poses.length - 1;
+          setPlaying(false);
+          setPlayTime(total);
+          setSelectedPose(last);
+          setAngles(seq.poses[last].angles);
+          return;
+        }
+      }
+      setPlayTime(t);
+      setAngles(sampleAt(seq, t, ids));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [playing, def]);
 
   const isMobile = useIsMobile();
 
@@ -962,6 +1033,50 @@ export default function RoboticsPage() {
       </div>
     );
   }
+
+  // ── Timeline actions ──
+  const showPose = (seq: Sequence, i: number) => {
+    setSelectedPose(i);
+    setAngles(seq.poses[i].angles);
+    setPlayTime(poseTimes(seq)[i]);
+  };
+  const updateSelectedPose = (a: ServoAngles) =>
+    setSequence((seq) =>
+      seq
+        ? { ...seq, poses: seq.poses.map((p, k) => (k === selectedPose ? { ...p, angles: a } : p)) }
+        : seq
+    );
+  /** User edits (sliders, 3D drag) change the selected pose; robot updates use setAngles. */
+  const editAngles = (a: ServoAngles) => {
+    setAngles(a);
+    updateSelectedPose(a);
+  };
+  const commitAngles = (a: ServoAngles) => {
+    setCommittedAngles(a);
+    updateSelectedPose(a);
+  };
+  const exportTimeline = () => {
+    if (!sequence) return;
+    const blob = new Blob([JSON.stringify(exportSequence(def, sequence), null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${def.id}-sequence.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const importTimeline = async (file: File) => {
+    try {
+      const seq = parseSequence(JSON.parse(await file.text()), def);
+      setSequence(seq);
+      showPose(seq, 0);
+      setTimelineMsg(`Imported ${seq.poses.length} poses`);
+    } catch (e) {
+      setTimelineMsg(`Import failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   const handleCopyPose = canCopyPose(def)
     ? () => {
@@ -1015,8 +1130,9 @@ export default function RoboticsPage() {
       <LiveServoControl
         def={def}
         angles={angles}
-        onAnglesChange={setAngles}
-        onAnglesCommit={setCommittedAngles}
+        onAnglesChange={editAngles}
+        onAnglesCommit={commitAngles}
+        locked={playing}
         controlMode={controlMode}
         robotConnected={robotConnected}
         onTakeControl={() => setControlMode("override")}
@@ -1036,13 +1152,14 @@ export default function RoboticsPage() {
       key={def.id}
       def={def}
       angles={angles}
-      onAnglesChange={setAngles}
-      onAnglesCommit={setCommittedAngles}
+      onAnglesChange={editAngles}
+      onAnglesCommit={commitAngles}
       controlMode={controlMode}
       robotConnected={robotConnected}
       autoRotate={autoRotate}
       initialCamera={initialCamera}
       onModelInfo={setModelInfo}
+      locked={playing}
     />
   );
 
@@ -1119,9 +1236,32 @@ export default function RoboticsPage() {
           <div className="flex min-h-0 flex-1 gap-3">
             <GlassSidebar side="left" open={leftOpen} sections={leftSections} />
 
-            <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
-              {viewer}
-            </main>
+            <div className="flex min-w-0 flex-1 flex-col gap-3">
+              <main className="glass-panel relative min-h-0 flex-1 overflow-hidden rounded-3xl">
+                {viewer}
+              </main>
+              {sequence && (
+                <PoseTimeline
+                  sequence={sequence}
+                  selected={selectedPose}
+                  onSelect={(i, next) => showPose(next ?? sequence, i)}
+                  onChange={setSequence}
+                  playing={playing}
+                  time={playing ? playTime : (poseTimes(sequence)[selectedPose] ?? 0)}
+                  onPlay={() => {
+                    setPlayTime(0);
+                    setPlaying(true);
+                  }}
+                  onStop={() => {
+                    setPlaying(false);
+                    showPose(sequence, selectedPose);
+                  }}
+                  onExport={exportTimeline}
+                  onImport={importTimeline}
+                  message={timelineMsg}
+                />
+              )}
+            </div>
 
             <GlassSidebar side="right" open={rightOpen} sections={rightSections} />
           </div>

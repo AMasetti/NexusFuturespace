@@ -258,6 +258,8 @@ function URDFRobot({
           const edges = new THREE.EdgesGeometry(geo, 15);
           const lines = new THREE.LineSegments(edges, pickEdgeMat(path));
           lines.userData.baseMat = lines.material;
+          // Picking hits the fill mesh; raycasting every edge too only costs time.
+          lines.raycast = () => {};
           const wrapper = new THREE.Group();
           wrapper.add(fill);
           wrapper.add(lines);

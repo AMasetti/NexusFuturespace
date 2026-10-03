@@ -15,6 +15,7 @@ Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Th
 - **IMU, FreeRTOS and Model panels** — shown only for robots whose definition describes that hardware.
 - **Pose timeline** — build motions as a sequence of poses with editable transition times, play them once or in a loop, and export them for your own programs.
 - **Glass layout** — frosted sidebars you can resize (drag the pill grip, double-click to reset) and hide from the header; widths, pose, camera and robot choice are remembered.
+- **Phone layout** — the same features on a phone: the viewer on top and every panel, timeline included, in one bottom sheet you resize with its pill and hide from the header.
 
 ## Getting started
 
@@ -157,7 +158,7 @@ components/hud/
     ServoControl.tsx        # Sliders generated from robot.json
     PowerConsumption.tsx    # Power model from robot.json servo types
     PoseTimeline.tsx        # Pose sequence editor and player
-    MobileScrollLayout.tsx  # Phone layout
+    GlassBottomSheet.tsx    # Phone layout: every panel in one resizable bottom sheet
   visualization/
     MujocoViewer.tsx        # URDF viewer, drag-to-turn, Model panel
 lib/

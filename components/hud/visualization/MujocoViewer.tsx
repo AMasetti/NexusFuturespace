@@ -300,7 +300,10 @@ function URDFRobot({
           const modelCenter = new THREE.Vector3(0, size.y / 2, 0);
           const cam = camera as THREE.PerspectiveCamera;
           const vFov = (cam.fov ?? 44) * D2R;
-          const hFov = 2 * Math.atan(Math.tan(vFov / 2) * (cam.aspect || 1));
+          // The viewer can turn taller than it is now (a phone hiding its panel
+          // sheet), so also fit the window's proportions.
+          const aspect = Math.min(cam.aspect || 1, window.innerWidth / window.innerHeight);
+          const hFov = 2 * Math.atan(Math.tan(vFov / 2) * aspect);
           const radius = size.length() / 2;
           const fit = (radius / Math.sin(Math.min(vFov, hFov) / 2)) * 1.1;
           const dir = camera.position.clone().sub(controlsRef.current.target).normalize();

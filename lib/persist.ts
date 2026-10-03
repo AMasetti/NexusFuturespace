@@ -108,6 +108,26 @@ export function saveJoints(angles: JointAngles): void {
   }
 }
 
+const KEY_SIDEBAR_WIDTH = "robotics:sidebar-width:v1";
+
+export function loadSidebarWidth(side: string): number | null {
+  try {
+    const raw = localStorage.getItem(`${KEY_SIDEBAR_WIDTH}:${side}`);
+    const w = raw ? Number(raw) : NaN;
+    return Number.isFinite(w) ? w : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSidebarWidth(side: string, width: number): void {
+  try {
+    localStorage.setItem(`${KEY_SIDEBAR_WIDTH}:${side}`, String(Math.round(width)));
+  } catch {
+    /* quota exceeded — ignore */
+  }
+}
+
 export function clearPersistedLayout(): void {
   try {
     localStorage.removeItem(KEY_PANELS);

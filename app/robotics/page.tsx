@@ -1149,7 +1149,7 @@ export default function RoboticsPage() {
             </header>
 
             <div className="flex min-h-0 flex-1 gap-3">
-              <GlassSidebar sections={leftSections} />
+              <GlassSidebar side="left" sections={leftSections} />
 
               <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
                 <DraggableViewer
@@ -1163,7 +1163,7 @@ export default function RoboticsPage() {
                 />
               </main>
 
-              <GlassSidebar sections={rightSections} />
+              <GlassSidebar side="right" sections={rightSections} />
             </div>
           </div>
         )}

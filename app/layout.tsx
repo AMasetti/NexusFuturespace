@@ -24,8 +24,17 @@ const exo2 = Exo_2({
 });
 
 export const metadata: Metadata = {
-  title: "NEXUS HUD — Robotics UI Component Library",
-  description: "Sci-fi HUD component library for robotics, AI, and scientific visualization frontends",
+  metadataBase: new URL("https://robotics.amasetti.com"),
+  title: "Nexus Robotics — digital twin for servo robots",
+  description:
+    "Pose a 3D robot by hand, build and play pose sequences, and drive the real robot from the browser. Optimus biped and Spot Micro quadruped, defined by URDF + robot.json.",
+  openGraph: {
+    title: "Nexus Robotics — digital twin for servo robots",
+    description:
+      "Pose a 3D robot by hand, build and play pose sequences, and drive the real robot from the browser.",
+    url: "/robotics",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({
@@ -38,7 +47,7 @@ export default function RootLayout({
       lang="en"
       className={`${rajdhani.variable} ${jetbrainsMono.variable} ${exo2.variable} h-full antialiased`}
     >
-      <body className="min-h-full bg-hud-bg text-hud-text">{children}</body>
+      <body className="bg-hud-bg text-hud-text min-h-full">{children}</body>
     </html>
   );
 }

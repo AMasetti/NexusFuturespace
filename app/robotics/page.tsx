@@ -11,7 +11,6 @@ import {
   HudSeparator,
   HudStatusDot,
   HudProgressBar,
-  TopographyMap,
   MujocoViewer,
   MujocoInfoPanel,
 } from "@/components/hud";
@@ -508,27 +507,6 @@ function PanelContent({
     //       </div>
     //     </HudPanel>
     //   );
-
-    case "nav-overlay":
-      return (
-        <HudPanel
-          title="Navigation Overlay"
-          subtitle="LIVE"
-          status="online"
-          cornerBrackets
-          className="h-full"
-          collapsed={collapsed}
-          onToggle={onToggle}
-        >
-          <div className="h-full overflow-hidden p-2">
-            <TopographyMap
-              gridSize={10}
-              contourLines
-              coordinates={{ lat: "40.7489° N", lng: "73.9680° W" }}
-            />
-          </div>
-        </HudPanel>
-      );
 
     case "system-metrics":
       return <FreeRTOSPanel collapsed={collapsed} onToggle={onToggle} />;
@@ -1069,8 +1047,8 @@ export default function RoboticsPage() {
   });
 
   const leftSections: GlassSection[] = [
+    panelSection("power-draw"),
     panelSection("imu-live"),
-    panelSection("system-metrics"),
     {
       id: "mujoco",
       content: (collapsed, onToggle) => (
@@ -1082,12 +1060,11 @@ export default function RoboticsPage() {
         />
       ),
     },
-    panelSection("power-draw"),
   ];
 
   const rightSections: GlassSection[] = [
+    panelSection("system-metrics"),
     panelSection("servo-control"),
-    panelSection("nav-overlay", { height: 320, defaultCollapsed: true }),
   ];
 
   const robotHost = process.env.NEXT_PUBLIC_ROBOT_HOST ?? "optimus.local";
@@ -1190,13 +1167,7 @@ export default function RoboticsPage() {
                 </span>
                 <HudBadge variant="info" label="PROTO-02" size="sm" />
               </div>
-              <div className="flex items-center gap-4">
-                <HudLabel text="SECTOR-7 / LAB-B" variant="dim" size="xs" mono />
-                <HudLabel text="MISSION ACTIVE" variant="secondary" size="xs" />
-                <div className="h-4 w-px bg-white/10" />
-                <HudLabel text="T+04:22:17" variant="primary" size="xs" mono />
-                <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
-              </div>
+              <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
             </header>
 
             <div className="flex min-h-0 flex-1 gap-3">

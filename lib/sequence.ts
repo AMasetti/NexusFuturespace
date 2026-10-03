@@ -18,8 +18,30 @@ export interface Pose {
 }
 
 export interface Sequence {
+  /** Animation name, e.g. "wave" — used in the export file name. */
+  name: string;
   poses: Pose[];
   loop: boolean;
+}
+
+export const DEFAULT_SEQUENCE_NAME = "untitled";
+const MAX_NAME = 40;
+
+/** File-name-safe name: lowercase, runs of anything else → "-". */
+export const slugify = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || DEFAULT_SEQUENCE_NAME;
+
+/** `<robot>_<name>_sequence.json` */
+export const sequenceFileName = (robot: string, name: string) =>
+  `${robot}_${slugify(name)}_sequence.json`;
+
+/** Name from a `<robot>_<name>_sequence.json` file name, or null if it doesn't match. */
+export function nameFromFileName(fileName: string, robot: string): string | null {
+  const m = fileName.match(new RegExp(`^${robot}_(.+)_sequence\\.json$`, "i"));
+  return m ? m[1] : null;
 }
 
 export const DEFAULT_DURATION_S = 1;
@@ -42,6 +64,7 @@ export const newPoseId = () => Math.random().toString(36).slice(2, 10);
 
 export function singlePoseSequence(angles: ServoAngles): Sequence {
   return {
+    name: DEFAULT_SEQUENCE_NAME,
     poses: [
       { id: newPoseId(), name: "Pose 1", angles: { ...angles }, durationS: DEFAULT_DURATION_S },
     ],
@@ -134,6 +157,7 @@ export function exportSequence(def: RobotDef, seq: Sequence) {
     format: SEQUENCE_FORMAT,
     version: 1,
     robot: def.id,
+    name: seq.name,
     angleUnit: "rad",
     interpolation: { type: "sigmoid", k: SIGMOID_K },
     loop: seq.loop,
@@ -184,5 +208,9 @@ export function parseSequence(raw: unknown, def: RobotDef): Sequence {
       durationS: Math.max(MIN_DURATION_S, d),
     };
   });
-  return { poses, loop: r.loop === true };
+  const name =
+    typeof r.name === "string" && r.name.trim()
+      ? r.name.trim().slice(0, MAX_NAME)
+      : DEFAULT_SEQUENCE_NAME;
+  return { name, poses, loop: r.loop === true };
 }

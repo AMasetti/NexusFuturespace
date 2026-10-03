@@ -20,7 +20,9 @@ import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { PoseTimeline } from "@/components/hud/panels/PoseTimeline";
 import {
   exportSequence,
+  nameFromFileName,
   parseSequence,
+  sequenceFileName,
   poseTimes,
   sampleAt,
   singlePoseSequence,
@@ -1063,13 +1065,17 @@ export default function RoboticsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${def.id}-sequence.json`;
+    a.download = sequenceFileName(def.id, sequence.name);
     a.click();
     URL.revokeObjectURL(url);
   };
   const importTimeline = async (file: File) => {
     try {
-      const seq = parseSequence(JSON.parse(await file.text()), def);
+      const raw = JSON.parse(await file.text()) as Record<string, unknown>;
+      const parsed = parseSequence(raw, def);
+      // Files without a "name" take it from <robot>_<name>_sequence.json.
+      const fromFile = typeof raw.name === "string" ? null : nameFromFileName(file.name, def.id);
+      const seq = fromFile ? { ...parsed, name: fromFile } : parsed;
       setSequence(seq);
       showPose(seq, 0);
       setTimelineMsg(`Imported ${seq.poses.length} poses`);

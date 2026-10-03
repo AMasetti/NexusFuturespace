@@ -13,6 +13,7 @@ Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Th
 - **Live robot link** — observe the robot's pose, take control to drive it, release to hand it back.
 - **Power Draw** — modelled current per servo group with session peak, average and energy, plus a reset.
 - **IMU, FreeRTOS and Model panels** — shown only for robots whose definition describes that hardware.
+- **Pose timeline** — build motions as a sequence of poses with editable transition times, play them once or in a loop, and export them for your own programs.
 - **Glass layout** — frosted sidebars you can resize (drag the pill grip, double-click to reset) and hide from the header; widths, pose, camera and robot choice are remembered.
 
 ## Getting started
@@ -80,6 +81,34 @@ Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`
 3. Add the id to `public/models/index.json`.
 4. Run `npm run validate:robots`. It checks the file against the schema in [`lib/robot-def.ts`](lib/robot-def.ts) and every joint and mesh against the URDF. CI runs it too.
 
+## Pose timeline
+
+The bar under the 3D view holds a sequence of poses for the current robot.
+
+- The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one.
+- The field between two poses is the transition time in seconds. Joints move between poses along a sigmoid curve — slow start, slow arrival — so the servos have time to settle.
+- **Play** runs the sequence once; with **Loop** on it returns to pose 1 (the `↺` field sets that return time) and repeats. Playback only moves the model, never the real robot.
+- The sequence is saved in the browser per robot. **Export** downloads it as JSON; **Import** loads one back.
+
+Exported files are meant to be replayed by a program:
+
+```jsonc
+{
+  "format": "nexus-pose-sequence",
+  "version": 1,
+  "robot": "optimus",
+  "angleUnit": "rad", // around each servo's zero — what the robot link sends as set_joints
+  "interpolation": { "type": "sigmoid", "k": 10 },
+  "loop": true,
+  "durationS": 3,
+  "servos": [{ "id": "l_hip_roll", "label": "Hip Roll L", "channel": 12, "limitsDeg": [-90, 90] }],
+  "poses": [{ "name": "Pose 1", "timeS": 0, "durationS": 1, "angles": { "l_hip_roll": 0.17453 } }],
+  "trajectory": { "hz": 50, "servoOrder": ["l_hip_roll"], "frames": [[0.17453]] },
+}
+```
+
+`trajectory.frames` is the whole motion pre-sampled at 50 Hz — one row per tick, angles in `servoOrder` — so a player can stream it to the servos without reimplementing the curve. To interpolate the keyframes yourself, each joint follows `a + (b − a) · s(u)`, where `u` is the fraction of the transition elapsed and `s` is the logistic `1 / (1 + e^(−k(u − ½)))` rescaled to run from 0 to 1.
+
 ## Live robot link
 
 Optimus' firmware exposes a WebSocket on port 81. The UI reaches it two ways:
@@ -126,14 +155,16 @@ components/hud/
     GlassSidebar.tsx        # Resizable, hideable frosted sidebar
     ServoControl.tsx        # Sliders generated from robot.json
     PowerConsumption.tsx    # Power model from robot.json servo types
+    PoseTimeline.tsx        # Pose sequence editor and player
     MobileScrollLayout.tsx  # Phone layout
   visualization/
     MujocoViewer.tsx        # URDF viewer, drag-to-turn, Model panel
 lib/
   robot-def.ts              # robot.json schema, validation, panel rules
+  sequence.ts               # Pose sequences: sigmoid interpolation, export/import
   use-robot-defs.ts         # Loads index.json and every robot.json
   robot-ws.tsx, ros.tsx     # Robot link: firmware WebSocket and rosbridge
-  persist.ts                # localStorage: pose, camera, sidebars, robot
+  persist.ts                # localStorage: sequences, camera, sidebars, robot
 public/models/
   index.json                # Robots shown in the picker
   optimus/, spotmicro/      # URDF + meshes + robot.json per robot

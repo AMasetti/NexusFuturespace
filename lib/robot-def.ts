@@ -207,7 +207,8 @@ export function checkAgainstUrdf(def: RobotDef, urdfJoints: Set<string>): string
 /** Power Draw needs a bus voltage and a known servo type for every servo. */
 export const hasPower = (d: RobotDef) =>
   !!d.power && d.servos.every((s) => s.type && d.servoTypes?.[s.type]);
-export const hasImu = (d: RobotDef) => !!d.imu;
+/** IMU readings arrive over the robot link, so the panel needs both. */
+export const hasImu = (d: RobotDef) => !!d.imu && !!d.link;
 export const hasRtos = (d: RobotDef) => !!d.mcu?.rtos;
 export const hasLink = (d: RobotDef) => !!d.link;
 export const canCopyPose = (d: RobotDef) => hasLink(d) && d.servos.every((s) => s.configDefine);

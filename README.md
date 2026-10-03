@@ -130,6 +130,25 @@ Panel positions, camera state, and joint angles persist to `localStorage`. **Res
 
 rosbridge runs with a self-signed TLS cert generated on first container boot (`/etc/rosbridge-tls/`). On first use, visit `https://localhost:9090` in your browser, accept the cert, then reload the UI. You only need to do this once per browser profile.
 
+## Robots
+
+Every robot is a folder in `public/models/<id>/` with its URDF, meshes and a `robot.json` that drives the whole UI for it. The robot picker in the header lists the ids in `public/models/index.json`.
+
+`robot.json` declares the servos (required) and, optionally, the hardware the UI knows about. Each panel appears only when the file defines what it needs:
+
+| Panel         | Needs                                                      |
+| ------------- | ---------------------------------------------------------- |
+| Servo Control | `servos` (required)                                        |
+| Model         | always — counts come from the URDF, `sim` adds settings    |
+| Power Draw    | `power.busV` and a `type` from `servoTypes` on every servo |
+| IMU           | `imu` and a `link` (its data comes from the robot)         |
+| FreeRTOS      | `mcu.rtos`                                                 |
+| Take Control  | `link` — live WebSocket/ROS connection to the robot        |
+
+Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`, so signs, offsets and linkages (several joints per servo) are data, not code. `pivot` names the joint a part visibly turns around when dragged in 3D. For robots with a `link`, servo ids are the firmware joint names.
+
+To add a robot: copy its URDF and meshes into `public/models/<id>/` (relative mesh paths), write `robot.json` (see `optimus/` for every section, `spotmicro/` for a servos-only robot), add the id to `index.json`, then run `npm run validate:robots` — it checks the file against the schema in `lib/robot-def.ts` and every joint and mesh against the URDF. CI runs it too.
+
 ## Releases
 
 Every push to `main` runs [`release.yml`](.github/workflows/release.yml), which picks the next version from the [Conventional Commits](https://www.conventionalcommits.org/) since the last `vX.Y.Z` tag:

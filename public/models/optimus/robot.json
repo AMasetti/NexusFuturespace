@@ -1,0 +1,210 @@
+{
+  "name": "Optimus",
+  "description": "Biped · 14 servos · live robot link",
+  "urdf": "Assembly.urdf",
+  "zeroDeg": 90,
+  "servos": [
+    {
+      "id": "l_hip_roll",
+      "label": "Hip Roll L",
+      "group": "Left Leg",
+      "channel": 12,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Hip-L", "scale": 1 }],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_L_HIP_ROLL"
+    },
+    {
+      "id": "l_hip_pitch",
+      "label": "Hip Pitch L",
+      "group": "Left Leg",
+      "channel": 13,
+      "limitsDeg": [-90, 90],
+      "joints": [
+        { "joint": "Unactuated-Knee-L-Top", "scale": -1 },
+        { "joint": "Unactuated-Tendon-L-Top", "scale": -1 },
+        { "joint": "Servo-Knee-L-Top", "scale": 1 }
+      ],
+      "pivot": "Unactuated-Knee-L-Top",
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_L_HIP_PITCH"
+    },
+    {
+      "id": "l_knee",
+      "label": "Knee Bend L",
+      "group": "Left Leg",
+      "channel": 14,
+      "limitsDeg": [-90, 90],
+      "joints": [
+        { "joint": "Servo-Knee-L-Bottom", "scale": -1 },
+        { "joint": "Unactuated-Knee-L-Bottom", "scale": 1 },
+        { "joint": "Unactuated-Tendon-L-Bottom", "scale": -1 }
+      ],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_L_KNEE"
+    },
+    {
+      "id": "l_ankle_roll",
+      "label": "Ankle Roll L",
+      "group": "Left Leg",
+      "channel": 15,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Ankle-L", "scale": -1 }],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_L_ANKLE_ROLL"
+    },
+    {
+      "id": "r_hip_roll",
+      "label": "Hip Roll R",
+      "group": "Right Leg",
+      "channel": 3,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Hip-R", "scale": 1 }],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_R_HIP_ROLL"
+    },
+    {
+      "id": "r_hip_pitch",
+      "label": "Hip Pitch R",
+      "group": "Right Leg",
+      "channel": 2,
+      "limitsDeg": [-90, 90],
+      "joints": [
+        { "joint": "Unactuated-Knee-R-Top", "scale": -1 },
+        { "joint": "Unactuated-Tendon-R-Top", "scale": -1 },
+        { "joint": "Servo-Knee-R-Top", "scale": 1 }
+      ],
+      "pivot": "Unactuated-Knee-R-Top",
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_R_HIP_PITCH"
+    },
+    {
+      "id": "r_knee",
+      "label": "Knee Bend R",
+      "group": "Right Leg",
+      "channel": 1,
+      "limitsDeg": [-90, 90],
+      "joints": [
+        { "joint": "Servo-Knee-R-Bottom", "scale": 1 },
+        { "joint": "Unactuated-Knee-R-Bottom", "scale": -1 },
+        { "joint": "Unactuated-Tendon-R-Bottom", "scale": 1 }
+      ],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_R_KNEE"
+    },
+    {
+      "id": "r_ankle_roll",
+      "label": "Ankle Roll R",
+      "group": "Right Leg",
+      "channel": 0,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Ankle-R", "scale": 1 }],
+      "type": "SG995",
+      "configDefine": "SERVO_OFFSET_DEG_R_ANKLE_ROLL"
+    },
+    {
+      "id": "l_shoulder_fb",
+      "label": "Shoulder FB L",
+      "group": "Arm Left",
+      "channel": 7,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Showlder-L-Front-Back", "scale": 1 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_L_SHOULDER_FB"
+    },
+    {
+      "id": "l_shoulder_lat",
+      "label": "Shoulder Lat L",
+      "group": "Arm Left",
+      "channel": 8,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Showlder-L-Inward-Outward", "scale": -1, "offsetDeg": -90 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_L_SHOULDER_LAT"
+    },
+    {
+      "id": "l_forearm_lat",
+      "label": "Forearm Lat L",
+      "group": "Arm Left",
+      "channel": 9,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Forearm-L", "scale": -1 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_L_FOREARM_LAT"
+    },
+    {
+      "id": "r_shoulder_fb",
+      "label": "Shoulder FB R",
+      "group": "Arm Right",
+      "channel": 4,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Showlder-R-Front-Back", "scale": -1 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_R_SHOULDER_FB"
+    },
+    {
+      "id": "r_shoulder_lat",
+      "label": "Shoulder Lat R",
+      "group": "Arm Right",
+      "channel": 5,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Showlder-R-Inward-Outward", "scale": 1, "offsetDeg": -90 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_R_SHOULDER_LAT"
+    },
+    {
+      "id": "r_forearm_lat",
+      "label": "Forearm Lat R",
+      "group": "Arm Right",
+      "channel": 6,
+      "limitsDeg": [-90, 90],
+      "joints": [{ "joint": "Servo-Forearm-R", "scale": 1 }],
+      "type": "S3003",
+      "configDefine": "ARM_SERVO_OFFSET_DEG_R_FOREARM_LAT"
+    }
+  ],
+  "servoTypes": {
+    "SG995": { "idleA": 0.36, "stallA": 2.0 },
+    "S3003": { "idleA": 0.15, "stallA": 0.6 }
+  },
+  "power": { "busV": 6.0 },
+  "imu": { "model": "MPU6050" },
+  "mcu": {
+    "model": "ESP32-C3",
+    "detail": "Core 0 · 160 MHz",
+    "rtos": {
+      "version": "v10.5",
+      "bus": "I2C 400 kHz",
+      "tasks": [
+        { "name": "imu", "hz": 200, "priority": 3, "stackKB": 4, "load": 0.18 },
+        { "name": "cpg", "hz": 100, "priority": 2, "stackKB": 8, "load": 0.35 },
+        { "name": "telemetry", "hz": 50, "priority": 1, "stackKB": 8, "load": 0.12 },
+        { "name": "idle", "hz": 0, "priority": 0, "stackKB": 1, "load": 0.35 }
+      ],
+      "peripherals": [
+        { "name": "MPU6050", "bus": "I2C 0x68", "hz": 200 },
+        { "name": "PCA9685", "bus": "I2C 0x40", "hz": 50 }
+      ],
+      "notes": ["PCA9685 PWM · 50 Hz · 16ch", "WS → 10 Hz"]
+    }
+  },
+  "sim": {
+    "engine": "MuJoCo 3.2.3",
+    "params": {
+      "Timestep": "0.001 s",
+      "Solver": "PGS",
+      "Integrator": "Euler",
+      "Gravity": "9.81 m/s²"
+    }
+  },
+  "link": {
+    "protocol": "firmware-ws",
+    "port": 81,
+    "ros": {
+      "jointStates": "/optimus/joint_states",
+      "command": "/optimus/cmd/joint",
+      "bridgeStatus": "/optimus/bridge/status"
+    },
+    "copyPoseTarget": "firmware-rl/include/config.h"
+  }
+}

@@ -83,12 +83,12 @@ Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`
 
 ## Pose timeline
 
-The bar under the 3D view holds a sequence of poses for the current robot.
+The bar under the 3D view holds an animation — a named sequence of poses — for the current robot.
 
-- The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one; hovering any pose shows a button to append a copy of it — handy for repeating moves like a wave.
+- The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one; hovering any pose shows a button to append a copy of it — handy for repeating moves like a wave. Drag a pose to reorder it (it keeps its own transition time); whichever pose is first is the start.
 - The field between two poses is the transition time in seconds. Joints move between poses along a sigmoid curve — slow start, slow arrival — so the servos have time to settle.
 - **Play** runs the sequence once; with **Loop** on it returns to pose 1 (the `↺` field sets that return time) and repeats. Playback only moves the model, never the real robot.
-- The sequence is saved in the browser per robot. **Export** downloads it as JSON; **Import** loads one back.
+- The animation is saved in the browser per robot. **Export** downloads it as `<robot>_<name>_sequence.json` (e.g. `optimus_wave_sequence.json`); **Import** loads one back, taking its name from the file's `name` field or, if missing, from that file-name pattern.
 
 Exported files are meant to be replayed by a program:
 
@@ -97,6 +97,7 @@ Exported files are meant to be replayed by a program:
   "format": "nexus-pose-sequence",
   "version": 1,
   "robot": "optimus",
+  "name": "wave",
   "angleUnit": "rad", // around each servo's zero — what the robot link sends as set_joints
   "interpolation": { "type": "sigmoid", "k": 10 },
   "loop": true,

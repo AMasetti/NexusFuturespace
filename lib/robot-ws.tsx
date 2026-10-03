@@ -27,23 +27,8 @@ export interface RobotImu {
   gz: number;
 }
 
-export interface RobotJoints {
-  l_hip_roll: number;
-  l_hip_pitch: number;
-  l_knee: number;
-  l_ankle_roll: number;
-  r_hip_roll: number;
-  r_hip_pitch: number;
-  r_knee: number;
-  r_ankle_roll: number;
-  l_shoulder_fb: number;
-  r_shoulder_fb: number;
-  l_shoulder_lat: number;
-  r_shoulder_lat: number;
-  l_forearm_lat: number;
-  r_forearm_lat: number;
-  hip_yaw: number;
-}
+// Firmware joint name → angle (rad). Keys match servo ids in robot.json.
+export type RobotJoints = Record<string, number>;
 
 export interface RobotState {
   imu: RobotImu;
@@ -56,7 +41,7 @@ export type WsStatus = "connecting" | "connected" | "disconnected";
 interface RobotWsContextValue {
   status: WsStatus;
   state: RobotState | null;
-  sendJoints: (joints: Partial<RobotJoints>) => void;
+  sendJoints: (joints: RobotJoints) => void;
   sendHalt: () => void;
 }
 
@@ -132,7 +117,7 @@ export function RobotWsProvider({
     };
   }, [host, port]);
 
-  const sendJoints = useCallback((joints: Partial<RobotJoints>) => {
+  const sendJoints = useCallback((joints: RobotJoints) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.warn("[robot-ws] sendJoints: WS not open, state=", ws?.readyState);

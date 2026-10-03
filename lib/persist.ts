@@ -1,7 +1,6 @@
 // ─── localStorage persistence helpers ────────────────────────────────────────
 
 import type { PanelRect, PanelId } from "./panels";
-import type { JointAngles } from "@/components/hud/panels/ServoSliders";
 
 export interface CameraState {
   px: number;
@@ -50,9 +49,12 @@ function isFiniteNum(v: unknown): v is number {
   return typeof v === "number" && isFinite(v);
 }
 
-export function loadCamera(): CameraState | null {
+// Optimus keeps the original key so saved views survive; other robots get their own.
+const cameraKey = (robot: string) => (robot === "optimus" ? KEY_CAMERA : `${KEY_CAMERA}:${robot}`);
+
+export function loadCamera(robot = "optimus"): CameraState | null {
   try {
-    const raw = localStorage.getItem(KEY_CAMERA);
+    const raw = localStorage.getItem(cameraKey(robot));
     if (!raw) return null;
     const c = JSON.parse(raw) as CameraState;
     // Validate all six fields are finite numbers
@@ -74,35 +76,59 @@ export function loadCamera(): CameraState | null {
   }
 }
 
-export function saveCamera(state: CameraState): void {
+export function saveCamera(state: CameraState, robot = "optimus"): void {
   try {
-    localStorage.setItem(KEY_CAMERA, JSON.stringify(state));
+    localStorage.setItem(cameraKey(robot), JSON.stringify(state));
   } catch {
     /* quota exceeded — ignore */
   }
 }
 
-const KEY_JOINTS = "robotics:joints:v1";
+// Servo angles per robot, keyed by servo id from robot.json.
+const KEY_SERVOS = "robotics:servos:v2";
+// Optimus poses saved before robot.json used legacy URDF joint names.
+const KEY_JOINTS_V1 = "robotics:joints:v1";
+const V1_TO_SERVO: Record<string, string> = {
+  "Servo-Hip-L": "l_hip_roll",
+  "Servo-Knee-L-Top": "l_hip_pitch",
+  "Servo-Knee-L-Bottom": "l_knee",
+  "Servo-Ankle-L": "l_ankle_roll",
+  "Servo-Hip-R": "r_hip_roll",
+  "Servo-Knee-R-Top": "r_hip_pitch",
+  "Servo-Knee-R-Bottom": "r_knee",
+  "Servo-Ankle-R": "r_ankle_roll",
+  "Servo-Showlder-L-Front-Back": "l_shoulder_fb",
+  "Servo-Showlder-R-Front-Back": "r_shoulder_fb",
+  "Servo-Showlder-L-Inward-Outward": "l_shoulder_lat",
+  "Servo-Showlder-R-Inward-Outward": "r_shoulder_lat",
+  "Servo-Forearm-L": "l_forearm_lat",
+  "Servo-Forearm-R": "r_forearm_lat",
+};
 
-export function loadJoints(): JointAngles | null {
+/** Saved angles for `robot`, limited to `servoIds`; null when nothing usable is stored. */
+export function loadServoAngles(robot: string, servoIds: string[]): Record<string, number> | null {
   try {
-    const raw = localStorage.getItem(KEY_JOINTS);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return null;
-    // Validate every value is a finite number
-    for (const v of Object.values(parsed)) {
-      if (!isFiniteNum(v)) return null;
+    let raw = localStorage.getItem(`${KEY_SERVOS}:${robot}`);
+    let parsed: Record<string, unknown> | null = raw ? JSON.parse(raw) : null;
+    if (!parsed && robot === "optimus" && (raw = localStorage.getItem(KEY_JOINTS_V1))) {
+      const v1 = JSON.parse(raw) as Record<string, unknown>;
+      parsed = Object.fromEntries(Object.entries(v1).map(([k, v]) => [V1_TO_SERVO[k] ?? k, v]));
     }
-    return parsed as JointAngles;
+    if (typeof parsed !== "object" || parsed === null) return null;
+    const angles: Record<string, number> = {};
+    for (const id of servoIds) {
+      const v = parsed[id];
+      angles[id] = typeof v === "number" && Number.isFinite(v) ? v : 0;
+    }
+    return angles;
   } catch {
     return null;
   }
 }
 
-export function saveJoints(angles: JointAngles): void {
+export function saveServoAngles(robot: string, angles: Record<string, number>): void {
   try {
-    localStorage.setItem(KEY_JOINTS, JSON.stringify(angles));
+    localStorage.setItem(`${KEY_SERVOS}:${robot}`, JSON.stringify(angles));
   } catch {
     /* quota exceeded — ignore */
   }
@@ -149,10 +175,9 @@ export function saveSidebarOpen(side: string, open: boolean): void {
 
 const KEY_ROBOT = "robotics:robot:v1";
 
-export function loadRobot<T extends string>(allowed: readonly T[]): T | null {
+export function loadRobot(): string | null {
   try {
-    const raw = localStorage.getItem(KEY_ROBOT);
-    return allowed.includes(raw as T) ? (raw as T) : null;
+    return localStorage.getItem(KEY_ROBOT);
   } catch {
     return null;
   }
@@ -170,7 +195,6 @@ export function clearPersistedLayout(): void {
   try {
     localStorage.removeItem(KEY_PANELS);
     localStorage.removeItem(KEY_CAMERA);
-    localStorage.removeItem(KEY_JOINTS);
   } catch {
     /* ignore */
   }

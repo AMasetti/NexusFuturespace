@@ -20,7 +20,7 @@ export { NodeGraph } from "./visualization/NodeGraph";
 export { TopographyMap } from "./visualization/TopographyMap";
 export { MicroscopyViewer } from "./visualization/MicroscopyViewer";
 export { CircuitSchematic } from "./visualization/CircuitSchematic";
-export { MujocoViewer, MujocoInfoPanel } from "./visualization/MujocoViewer";
+export { MujocoViewer, ModelInfoPanel, type ModelInfo } from "./visualization/MujocoViewer";
 export type { PlacedBoard, Wire, BoardType, PinType } from "./visualization/CircuitSchematic";
 
 // Panels

@@ -1,105 +1,62 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { HudPanel } from "../core/HudPanel";
-import type { JointAngles } from "./ServoSliders";
-
-// ── Servo specs at 6 V ────────────────────────────────────────────────────────
-// SG995 (Tower Pro) — legs (8 servos: 4 per leg × 2 legs)
-//   No-load hold current: 360 mA   (motor energised, no mechanical load)
-//   Stall current:       2000 mA
-//   Movement extra:      2000 - 360 = 1640 mA at full slew
-//
-// Futaba S3003 — arms (6 servos: shoulder FB ×2, shoulder lat ×2, forearm ×2)
-//   No-load hold current: 150 mA   (holding pose against light gravity load)
-//   Stall current:         600 mA
-//   Movement extra:        600 - 150 = 450 mA at full slew
-
-const SUPPLY_V = 6.0;
-
-const SG995 = { idle: 0.36, extra: 1.64 }; // amps
-const S3003 = { idle: 0.15, extra: 0.45 }; // amps
+import { servoGroups, type RobotDef, type ServoAngles } from "@/lib/robot-def";
 
 // Max realistic servo slew rate used to normalise angular velocity → load fraction
 const MAX_SLEW = Math.PI; // rad/s ≈ 180°/s
 
-// ── Joint → servo type mapping ────────────────────────────────────────────────
-const JOINT_KEYS = [
-  "Servo-Hip-L",
-  "Servo-Hip-R",
-  "Servo-Knee-L-Top",
-  "Servo-Knee-R-Top",
-  "Servo-Knee-L-Bottom",
-  "Servo-Knee-R-Bottom",
-  "Servo-Ankle-L",
-  "Servo-Ankle-R",
-  "Servo-Showlder-L-Front-Back",
-  "Servo-Showlder-R-Front-Back",
-  "Servo-Showlder-L-Inward-Outward",
-  "Servo-Showlder-R-Inward-Outward",
-  "Servo-Forearm-L",
-  "Servo-Forearm-R",
-] as const satisfies readonly (keyof JointAngles)[];
-
-type JointKey = (typeof JOINT_KEYS)[number];
-
-const SERVO_TYPE: Record<JointKey, typeof SG995> = {
-  "Servo-Hip-L": SG995,
-  "Servo-Hip-R": SG995,
-  "Servo-Knee-L-Top": SG995,
-  "Servo-Knee-R-Top": SG995,
-  "Servo-Knee-L-Bottom": SG995,
-  "Servo-Knee-R-Bottom": SG995,
-  "Servo-Ankle-L": SG995,
-  "Servo-Ankle-R": SG995,
-  "Servo-Showlder-L-Front-Back": S3003,
-  "Servo-Showlder-R-Front-Back": S3003,
-  "Servo-Showlder-L-Inward-Outward": S3003,
-  "Servo-Showlder-R-Inward-Outward": S3003,
-  "Servo-Forearm-L": S3003,
-  "Servo-Forearm-R": S3003,
-};
-
-// ── Derived power constants ───────────────────────────────────────────────────
-// Baseline = sum of all idle draws (what the robot consumes standing still)
-const BASELINE_W = JOINT_KEYS.reduce((s, k) => s + SUPPLY_V * SERVO_TYPE[k].idle, 0);
-// ≈ 8 × 6 × 0.360 + 6 × 6 × 0.150 = 17.28 + 5.40 = 22.68 W
-
-// Max additional movement power (all servos at full slew simultaneously)
-const PEAK_EXTRA_W = JOINT_KEYS.reduce((s, k) => s + SUPPLY_V * SERVO_TYPE[k].extra, 0);
-// ≈ 8 × 6 × 1.640 + 6 × 6 × 0.450 = 78.72 + 16.20 = 94.92 W
-
-const MAX_W = BASELINE_W + PEAK_EXTRA_W; // ≈ 117.60 W
-
-// ── Groups ────────────────────────────────────────────────────────────────────
-const GROUPS: {
-  label: string;
-  color: string;
-  keys: readonly JointKey[];
-}[] = [
-  {
-    label: "LEFT LEG",
-    color: "rgba(0,200,255,0.85)",
-    keys: ["Servo-Hip-L", "Servo-Knee-L-Top", "Servo-Knee-L-Bottom", "Servo-Ankle-L"],
-  },
-  {
-    label: "RIGHT LEG",
-    color: "rgba(0,255,156,0.85)",
-    keys: ["Servo-Hip-R", "Servo-Knee-R-Top", "Servo-Knee-R-Bottom", "Servo-Ankle-R"],
-  },
-  {
-    label: "ARMS",
-    color: "rgba(180,120,255,0.85)",
-    keys: [
-      "Servo-Showlder-L-Front-Back",
-      "Servo-Showlder-R-Front-Back",
-      "Servo-Showlder-L-Inward-Outward",
-      "Servo-Showlder-R-Inward-Outward",
-      "Servo-Forearm-L",
-      "Servo-Forearm-R",
-    ],
-  },
+// Group colours, assigned in the order groups appear in robot.json.
+const GROUP_COLORS = [
+  "rgba(0,200,255,0.85)",
+  "rgba(0,255,156,0.85)",
+  "rgba(180,120,255,0.85)",
+  "rgba(255,190,90,0.85)",
+  "rgba(255,120,170,0.85)",
 ];
+
+interface ServoSpec {
+  idle: number; // A held at rest
+  extra: number; // A added at full slew (stall − idle)
+}
+
+/** Everything the panel needs, derived from robot.json (power + servoTypes). */
+interface PowerModel {
+  busV: number;
+  keys: string[];
+  spec: Record<string, ServoSpec>;
+  baselineW: number;
+  peakExtraW: number;
+  maxW: number;
+  groups: { label: string; color: string; keys: string[] }[];
+  types: { name: string; count: number; stallA: number }[];
+}
+
+function buildPowerModel(def: RobotDef): PowerModel {
+  const busV = def.power?.busV ?? 0;
+  const spec: Record<string, ServoSpec> = {};
+  for (const s of def.servos) {
+    const t = def.servoTypes?.[s.type ?? ""] ?? { idleA: 0, stallA: 0 };
+    spec[s.id] = { idle: t.idleA, extra: t.stallA - t.idleA };
+  }
+  const keys = def.servos.map((s) => s.id);
+  const baselineW = keys.reduce((sum, k) => sum + busV * spec[k].idle, 0);
+  const peakExtraW = keys.reduce((sum, k) => sum + busV * spec[k].extra, 0);
+  const groups = servoGroups(def).map((g, i) => ({
+    label: g.label,
+    color: GROUP_COLORS[i % GROUP_COLORS.length],
+    keys: g.servos.map((s) => s.id),
+  }));
+  const types = Object.entries(def.servoTypes ?? {})
+    .map(([name, t]) => ({
+      name,
+      stallA: t.stallA,
+      count: def.servos.filter((s) => s.type === name).length,
+    }))
+    .filter((t) => t.count > 0);
+  return { busV, keys, spec, baselineW, peakExtraW, maxW: baselineW + peakExtraW, groups, types };
+}
 
 // ── Rolling buffer ────────────────────────────────────────────────────────────
 const WINDOW_S = 5;
@@ -114,7 +71,6 @@ const C_IDLE = "rgba(0,255,156,0.75)";
 const C_GRID = "rgba(0,200,255,0.12)";
 const C_DIM = "rgba(0,200,255,0.50)";
 const C_VAL = "rgba(0,200,255,0.95)";
-const C_ARMS = "rgba(180,120,255,0.85)";
 
 // ── Type scale — four sizes, used everywhere in the panel ─────────────────────
 const MONO: React.CSSProperties = {
@@ -142,9 +98,9 @@ const CARD: React.CSSProperties = {
 // non-scaling strokes); labels and the live dot are HTML laid over it.
 const CH_H = 96;
 
-const pctOf = (w: number) => Math.max(0, Math.min(1, w / MAX_W)) * 100;
-
-function PowerChart({ samples, peakW }: { samples: number[]; peakW: number }) {
+function PowerChart({ pm, samples, peakW }: { pm: PowerModel; samples: number[]; peakW: number }) {
+  const { baselineW: BASELINE_W, maxW: MAX_W } = pm;
+  const pctOf = (w: number) => Math.max(0, Math.min(1, w / MAX_W)) * 100;
   const toX = (i: number) => (i / (BUFFER_LEN - 1)) * 100;
   const toY = (w: number) => 100 - pctOf(w);
 
@@ -266,14 +222,14 @@ function LoadBar({
 }
 
 // ── Group watts (idle + movement) ─────────────────────────────────────────────
-function calcGroupW(keys: readonly JointKey[], vel: Partial<Record<JointKey, number>>) {
+function calcGroupW(pm: PowerModel, keys: readonly string[], vel: Record<string, number>) {
   let idleW = 0;
   let moveW = 0;
   for (const key of keys) {
-    const spec = SERVO_TYPE[key];
-    idleW += SUPPLY_V * spec.idle;
+    const spec = pm.spec[key];
+    idleW += pm.busV * spec.idle;
     const load = Math.min(Math.abs(vel[key] ?? 0) / MAX_SLEW, 1);
-    moveW += SUPPLY_V * spec.extra * load;
+    moveW += pm.busV * spec.extra * load;
   }
   return { idleW, moveW, totalW: idleW + moveW };
 }
@@ -287,7 +243,8 @@ const fmtDuration = (s: number) =>
 
 // ── Public component ──────────────────────────────────────────────────────────
 interface PowerConsumptionProps {
-  angles: JointAngles;
+  def: RobotDef;
+  angles: ServoAngles;
   /** Mobile collapse state — forwarded to the inner HudPanel. */
   collapsed?: boolean;
   /** Mobile toggle callback — forwarded to the inner HudPanel. */
@@ -302,22 +259,24 @@ interface SessionStats {
   energyWh: number;
 }
 
-const idleGroupW = () =>
-  Object.fromEntries(GROUPS.map((g) => [g.label, calcGroupW(g.keys, {}).idleW]));
+const idleGroupW = (pm: PowerModel) =>
+  Object.fromEntries(pm.groups.map((g) => [g.label, calcGroupW(pm, g.keys, {}).idleW]));
 
-const freshSession = () => ({
+const freshSession = (pm: PowerModel) => ({
   start: performance.now(),
   energyJ: 0,
-  peakW: BASELINE_W,
-  groupPeakW: idleGroupW(),
+  peakW: pm.baselineW,
+  groupPeakW: idleGroupW(pm),
 });
 
-export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumptionProps) {
-  const prevAngles = useRef<JointAngles>(angles);
+export function PowerConsumption({ def, angles, collapsed, onToggle }: PowerConsumptionProps) {
+  const pm = useMemo(() => buildPowerModel(def), [def]);
+  const { baselineW: BASELINE_W, peakExtraW: PEAK_EXTRA_W, maxW: MAX_W } = pm;
+  const prevAngles = useRef<ServoAngles>(angles);
   const prevTime = useRef<number>(0);
   const smoothedW = useRef(BASELINE_W);
-  const velocities = useRef<Partial<Record<JointKey, number>>>({});
-  const session = useRef(freshSession());
+  const velocities = useRef<Record<string, number>>({});
+  const session = useRef(freshSession(pm));
   const anglesRef = useRef(angles);
   useLayoutEffect(() => {
     anglesRef.current = angles;
@@ -325,9 +284,9 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
 
   const [samples, setSamples] = useState<number[]>(() => Array(BUFFER_LEN).fill(BASELINE_W));
   const [displayW, setDisplayW] = useState(BASELINE_W);
-  const [velSnap, setVelSnap] = useState<Partial<Record<JointKey, number>>>({});
+  const [velSnap, setVelSnap] = useState<Record<string, number>>({});
   const [stats, setStats] = useState<SessionStats>({
-    groupPeakW: idleGroupW(),
+    groupPeakW: idleGroupW(pm),
     seconds: 0,
     peakW: BASELINE_W,
     avgW: BASELINE_W,
@@ -341,7 +300,7 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
     const ALPHA_DOWN = 0.1; // wattage smoothing — slow decay
 
     prevTime.current = performance.now();
-    session.current = freshSession();
+    session.current = freshSession(pm);
     let rafId: number;
     let lastTick = performance.now();
 
@@ -355,8 +314,8 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
         const vel = velocities.current;
 
         // Per-joint velocity with exponential decay
-        for (const key of JOINT_KEYS) {
-          const instantV = Math.abs(cur[key] - prev[key]) / dt;
+        for (const key of pm.keys) {
+          const instantV = Math.abs((cur[key] ?? 0) - (prev[key] ?? 0)) / dt;
           const decayed = (vel[key] ?? 0) * Math.exp(-dt / TAU_DECAY);
           vel[key] = Math.max(instantV, decayed);
         }
@@ -365,10 +324,10 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
 
         // Total power = baseline + velocity-driven movement draw
         let movementW = 0;
-        for (const key of JOINT_KEYS) {
-          const spec = SERVO_TYPE[key];
+        for (const key of pm.keys) {
+          const spec = pm.spec[key];
           const load = Math.min((vel[key] ?? 0) / MAX_SLEW, 1);
-          movementW += SUPPLY_V * spec.extra * load;
+          movementW += pm.busV * spec.extra * load;
         }
 
         const target = BASELINE_W + movementW;
@@ -383,8 +342,8 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
         const sess = session.current;
         sess.energyJ += w * dt;
         sess.peakW = Math.max(sess.peakW, w);
-        for (const g of GROUPS) {
-          const gw = calcGroupW(g.keys, vel).totalW;
+        for (const g of pm.groups) {
+          const gw = calcGroupW(pm, g.keys, vel).totalW;
           sess.groupPeakW[g.label] = Math.max(sess.groupPeakW[g.label] ?? 0, gw);
         }
         const seconds = (now - sess.start) / 1000;
@@ -406,10 +365,10 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
 
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
-  }, []);
+  }, [pm, BASELINE_W, MAX_W]);
 
   const resetSession = () => {
-    session.current = freshSession();
+    session.current = freshSession(pm);
     setSamples(Array(BUFFER_LEN).fill(smoothedW.current));
     setStats({
       seconds: 0,
@@ -504,16 +463,18 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
           <span style={T_LABEL}>
             Last {WINDOW_S} s · {SAMPLE_HZ} Hz
           </span>
-          <PowerChart samples={samples} peakW={stats.peakW} />
+          <PowerChart pm={pm} samples={samples} peakW={stats.peakW} />
         </div>
 
         {/* ── Per-group breakdown ───────────────────────────── */}
         <div className="flex flex-col gap-2.5">
           <span style={T_LABEL}>By group</span>
-          {GROUPS.map((g) => {
-            const { idleW, moveW, totalW } = calcGroupW(g.keys, velSnap);
-            const spec = SERVO_TYPE[g.keys[0]];
-            const gMax = g.keys.length * SUPPLY_V * (spec.idle + spec.extra);
+          {pm.groups.map((g) => {
+            const { idleW, moveW, totalW } = calcGroupW(pm, g.keys, velSnap);
+            const gMax = g.keys.reduce(
+              (sum, k) => sum + pm.busV * (pm.spec[k].idle + pm.spec[k].extra),
+              0
+            );
             const gPeak = stats.groupPeakW[g.label] ?? idleW;
             return (
               <div key={g.label} className="flex flex-col gap-1">
@@ -543,9 +504,13 @@ export function PowerConsumption({ angles, collapsed, onToggle }: PowerConsumpti
         {/* ── Servo specs ───────────────────────────────────── */}
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Legs × 8", model: "SG995", detail: "2 A stall", color: C_VAL },
-            { label: "Arms × 6", model: "S3003", detail: "0.6 A stall", color: C_ARMS },
-            { label: "Bus", model: `${SUPPLY_V.toFixed(1)} V`, detail: "fixed", color: C_PEAK },
+            ...pm.types.map((t, i) => ({
+              label: `${t.count} servos`,
+              model: t.name,
+              detail: `${t.stallA} A stall`,
+              color: GROUP_COLORS[i % GROUP_COLORS.length],
+            })),
+            { label: "Bus", model: `${pm.busV.toFixed(1)} V`, detail: "fixed", color: C_PEAK },
           ].map((c) => (
             <div key={c.label} className="flex flex-col gap-1 rounded-xl px-2.5 py-2" style={CARD}>
               <span style={T_LABEL}>{c.label}</span>

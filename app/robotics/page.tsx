@@ -6,37 +6,36 @@ import { MobileScrollLayout } from "@/components/hud/panels/MobileScrollLayout";
 
 import {
   HudBadge,
-  HudLabel,
   HudPanel,
   HudSeparator,
   HudStatusDot,
-  HudProgressBar,
   MujocoViewer,
-  MujocoInfoPanel,
+  ModelInfoPanel,
+  type ModelInfo,
 } from "@/components/hud";
 import { GlassSidebar, type GlassSection } from "@/components/hud/panels/GlassSidebar";
 import { Check, ChevronDown, PanelLeft, PanelRight } from "lucide-react";
-import { SpotServoSliders } from "@/components/hud/panels/SpotServoSliders";
-import { DEFAULT_SPOT_ANGLES, type SpotAngles } from "@/lib/spotmicro";
-import type { RobotModelId } from "@/components/hud/visualization/MujocoViewer";
-import {
-  ServoSliders,
-  DEFAULT_JOINT_ANGLES,
-  FIRMWARE_TO_JOINT,
-  FIRMWARE_TO_URDF_OFFSET,
-  JOINT_TO_FIRMWARE,
-  type JointAngles,
-} from "@/components/hud/panels/ServoSliders";
+import { ServoControl } from "@/components/hud/panels/ServoControl";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
-import { ROBOTICS_TASKS } from "@/lib/hud-data";
 import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
 import { RobotWsProvider, useRobotWs } from "@/lib/robot-ws";
-import { type PanelId } from "@/lib/panels";
+import { useRobotDefs } from "@/lib/use-robot-defs";
+import {
+  canCopyPose,
+  hasImu,
+  hasPower,
+  hasRtos,
+  hasLink,
+  zeroAngles,
+  type McuDef,
+  type RobotDef,
+  type ServoAngles,
+} from "@/lib/robot-def";
 import {
   loadCamera,
   saveCamera,
-  loadJoints,
-  saveJoints,
+  loadServoAngles,
+  saveServoAngles,
   loadSidebarOpen,
   saveSidebarOpen,
   loadRobot,
@@ -46,36 +45,50 @@ import {
 
 // ─── FreeRTOS process monitor panel ──────────────────────────────────────────
 
-const RTOS_TASKS = [
-  { name: "imu", hz: 200, pri: 3, stack: 4096, load: 0.18, color: "rgba(0,220,255,0.90)" },
-  { name: "cpg", hz: 100, pri: 2, stack: 8192, load: 0.35, color: "rgba(0,255,156,0.90)" },
-  { name: "telemetry", hz: 50, pri: 1, stack: 8192, load: 0.12, color: "rgba(180,100,255,0.90)" },
-  { name: "idle", hz: 0, pri: 0, stack: 1024, load: 0.35, color: "rgba(0,200,255,0.40)" },
-] as const;
+// Task/peripheral colours, assigned in file order; the idle task is dimmed.
+const RTOS_COLORS = [
+  "rgba(0,220,255,0.90)",
+  "rgba(0,255,156,0.90)",
+  "rgba(180,100,255,0.90)",
+  "rgba(255,190,90,0.90)",
+];
+const RTOS_IDLE = "rgba(0,200,255,0.40)";
 
-const PERIPHERALS = [
-  { name: "MPU6050", bus: "I2C 0x68", hz: 200, color: "rgba(0,220,255,0.80)" },
-  { name: "PCA9685", bus: "I2C 0x40", hz: 50, color: "rgba(0,255,156,0.80)" },
-] as const;
-
-function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
+function FreeRTOSPanel({
+  mcu,
+  collapsed,
+  onToggle,
+}: {
+  mcu: McuDef;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  const rtos = mcu.rtos!;
+  const RTOS_TASKS = rtos.tasks.map((t, i) => ({
+    ...t,
+    color: t.hz > 0 ? RTOS_COLORS[i % RTOS_COLORS.length] : RTOS_IDLE,
+  }));
+  const PERIPHERALS = (rtos.peripherals ?? []).map((p, i) => ({
+    ...p,
+    color: RTOS_COLORS[i % RTOS_COLORS.length],
+  }));
   const cycleRefs = useRef<(HTMLSpanElement | null)[]>([]);
-  const counters = useRef<number[]>(RTOS_TASKS.map(() => 0));
+  const counters = useRef<number[]>(rtos.tasks.map(() => 0));
 
   useEffect(() => {
     const id = setInterval(() => {
-      RTOS_TASKS.forEach((task, i) => {
+      rtos.tasks.forEach((task, i) => {
         counters.current[i] += task.hz > 0 ? task.hz : Math.random() < 0.3 ? 1 : 0;
         const el = cycleRefs.current[i];
         if (el) el.textContent = counters.current[i].toLocaleString();
       });
     }, 100);
     return () => clearInterval(id);
-  }, []);
+  }, [rtos.tasks]);
 
   return (
     <HudPanel
-      title="FreeRTOS · ESP32-C3"
+      title={`FreeRTOS · ${mcu.model}`}
       status="online"
       cornerBrackets
       className="h-full"
@@ -89,13 +102,13 @@ function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?
             className="font-mono font-bold"
             style={{ fontSize: 11, color: "rgba(0,220,255,0.95)", letterSpacing: "0.12em" }}
           >
-            ESP32-C3 · CORE 0 · 160 MHz
+            {[mcu.model, mcu.detail].filter(Boolean).join(" · ").toUpperCase()}
           </span>
           <span
             className="font-mono"
             style={{ fontSize: 9, color: "rgba(0,200,255,0.45)", letterSpacing: "0.10em" }}
           >
-            RTOS v10.5
+            {rtos.version ? `RTOS ${rtos.version}` : "RTOS"}
           </span>
         </div>
 
@@ -107,7 +120,7 @@ function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?
             className="font-mono uppercase"
             style={{ fontSize: 9, color: "rgba(0,200,255,0.45)", letterSpacing: "0.14em" }}
           >
-            Peripherals · I2C 400 kHz
+            {["Peripherals", rtos.bus].filter(Boolean).join(" · ")}
           </span>
           <div className="flex gap-3">
             {PERIPHERALS.map((p) => (
@@ -147,7 +160,7 @@ function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?
                     className="font-mono"
                     style={{ fontSize: 9, color: "rgba(0,200,255,0.40)" }}
                   >
-                    pri:{task.pri} · {task.stack / 1024}KB
+                    pri:{task.priority} · {task.stackKB}KB
                   </span>
                 </div>
                 <div className="flex items-baseline gap-1.5">
@@ -195,18 +208,23 @@ function FreeRTOSPanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?
 
         <HudSeparator />
 
-        {/* Servo PWM note */}
-        <div className="flex items-baseline justify-between">
-          <span
-            className="font-mono"
-            style={{ fontSize: 9, color: "rgba(0,200,255,0.40)", letterSpacing: "0.10em" }}
-          >
-            PCA9685 PWM · 50 Hz · 16ch
-          </span>
-          <span className="font-mono" style={{ fontSize: 9, color: "rgba(0,255,156,0.55)" }}>
-            WS → 10 Hz
-          </span>
-        </div>
+        {rtos.notes && rtos.notes.length > 0 && (
+          <div className="flex items-baseline justify-between gap-2">
+            {rtos.notes.map((note, i) => (
+              <span
+                key={note}
+                className="font-mono"
+                style={{
+                  fontSize: 9,
+                  letterSpacing: "0.10em",
+                  color: i === 0 ? "rgba(0,200,255,0.40)" : "rgba(0,255,156,0.55)",
+                }}
+              >
+                {note}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </HudPanel>
   );
@@ -241,7 +259,15 @@ function AxisBar({ value, max, color }: { value: number; max: number; color: str
   );
 }
 
-function ImuLivePanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?: () => void }) {
+function ImuLivePanel({
+  model,
+  collapsed,
+  onToggle,
+}: {
+  model: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
   const { status: wsStatus, state: wsState } = useRobotWs();
   const isLive = wsStatus === "connected" && wsState !== null;
 
@@ -262,7 +288,7 @@ function ImuLivePanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?:
 
   return (
     <HudPanel
-      title="IMU · MPU6050"
+      title={`IMU · ${model}`}
       subtitle={isLive ? "LIVE" : "NO SIGNAL"}
       status={isLive ? "online" : "warning"}
       cornerBrackets
@@ -407,13 +433,18 @@ function ImuLivePanel({ collapsed, onToggle }: { collapsed?: boolean; onToggle?:
   );
 }
 
-// ─── Panel content ────────────────────────────────────────────────────────────
+// ─── Servo control with a live robot link ─────────────────────────────────────
 
-function PanelContent({
-  id,
-  jointAngles,
-  onJointAnglesChange,
-  onJointAnglesCommit,
+/**
+ * Servo Control that follows the robot link: read-only while observing a
+ * connected robot, editable in override (commits go to the robot) or offline.
+ * Robots without a link are never "connected", so they're always editable.
+ */
+function LiveServoControl({
+  def,
+  angles,
+  onAnglesChange,
+  onAnglesCommit,
   controlMode,
   robotConnected,
   onTakeControl,
@@ -422,213 +453,81 @@ function PanelContent({
   collapsed,
   onToggle,
 }: {
-  id: PanelId;
-  jointAngles: JointAngles;
-  onJointAnglesChange: (angles: JointAngles) => void;
-  onJointAnglesCommit: (angles: JointAngles) => void;
+  def: RobotDef;
+  angles: ServoAngles;
+  onAnglesChange: (a: ServoAngles) => void;
+  onAnglesCommit: (a: ServoAngles) => void;
   controlMode: "observe" | "override";
   robotConnected: boolean;
   onTakeControl: () => void;
   onReleaseControl: () => void;
-  onCopyPose: () => void;
+  onCopyPose?: () => void;
   collapsed?: boolean;
   onToggle?: () => void;
 }) {
   const rosStatus = useRosStatus();
-
-  switch (id) {
-    // case "joint-status":
-    //   return (
-    //     <HudPanel title="Joint Status" status="warning" cornerBrackets className="h-full">
-    //       <div className="flex h-full flex-col gap-3 overflow-auto p-3">
-    //         <div className="flex justify-center">
-    //           <GaugeCircle value={62} max={180} label="Active Joint" unit="°" size="md" color="primary" animated />
-    //         </div>
-    //         <HudSeparator />
-    //         <div className="flex flex-col gap-2">
-    //           {ROBOTICS_JOINTS.map((j) => (
-    //             <HudProgressBar key={j.label} label={j.label} value={j.value} unit="°" color={j.color} animated />
-    //           ))}
-    //         </div>
-    //       </div>
-    //     </HudPanel>
-    //   );
-
-    // case "power-systems":
-    //   return (
-    //     <HudPanel title="Power Systems" status="online" cornerBrackets className="h-full">
-    //       <div className="flex h-full flex-col gap-3 overflow-auto p-3">
-    //         <div className="flex justify-center">
-    //           <GaugeCircle value={74} label="Battery" unit="%" size="sm" color="secondary" animated />
-    //         </div>
-    //         <div className="flex flex-col gap-2">
-    //           <HudProgressBar label="Voltage" value={87} unit="V" color="secondary" animated />
-    //           <HudProgressBar label="Current Draw" value={42} unit="A" color="warning" animated />
-    //           <HudProgressBar label="Thermal" value={61} unit="°C" color="primary" animated />
-    //         </div>
-    //       </div>
-    //     </HudPanel>
-    //   );
-
-    // case "motor-telemetry":
-    //   return (
-    //     <HudPanel title="Motor Telemetry" cornerBrackets className="h-full">
-    //       <div className="flex h-full flex-col gap-2 overflow-auto p-3">
-    //         <WaveformBar label="Left Drive" color="primary" animated height={40} />
-    //         <WaveformBar label="Right Drive" color="secondary" animated height={40} />
-    //       </div>
-    //     </HudPanel>
-    //   );
-
-    // case "mission-status":
-    //   return (
-    //     <HudPanel title="Mission Status" status="online" cornerBrackets className="h-full">
-    //       <div className="flex h-full flex-col gap-3 overflow-auto p-3">
-    //         <div className="flex items-center justify-between">
-    //           <HudBadge variant="online" label="In Progress" pulse size="sm" />
-    //           <HudLabel text="OBJ 3 of 5" variant="primary" size="xs" mono />
-    //         </div>
-    //         <HudSeparator />
-    //         <div className="flex flex-col gap-2">
-    //           {ROBOTICS_TASKS.map((t) => (
-    //             <HudProgressBar key={t.label} label={t.label} value={t.value} color={t.color} animated />
-    //           ))}
-    //         </div>
-    //         <HudSeparator />
-    //         <div className="flex flex-col gap-1.5">
-    //           <div className="flex items-center gap-2">
-    //             <HudStatusDot status="online" size="sm" />
-    //             <HudLabel text="Uplink nominal" variant="dim" size="xs" mono />
-    //           </div>
-    //           <div className="flex items-center gap-2">
-    //             <HudStatusDot status="warning" size="sm" />
-    //             <HudLabel text="Left knee encoder drift" variant="dim" size="xs" mono />
-    //           </div>
-    //           <div className="flex items-center gap-2">
-    //             <HudStatusDot status="online" size="sm" />
-    //             <HudLabel text="Gait model v2.4 loaded" variant="dim" size="xs" mono />
-    //           </div>
-    //         </div>
-    //       </div>
-    //     </HudPanel>
-    //   );
-
-    case "system-metrics":
-      return <FreeRTOSPanel collapsed={collapsed} onToggle={onToggle} />;
-
-    case "mission-status":
-      return (
-        <HudPanel title="Mission Status" status="online" cornerBrackets className="h-full">
-          <div className="flex h-full flex-col gap-3 overflow-auto p-3">
-            <div className="flex items-center justify-between">
-              <HudBadge variant="online" label="In Progress" pulse size="sm" />
-              <HudLabel text="OBJ 3 of 5" variant="primary" size="xs" mono />
+  const isConnected = hasLink(def) && (rosStatus === "connected" || robotConnected);
+  const isOverride = controlMode === "override";
+  const canDrive = !isConnected || isOverride;
+  return (
+    <ServoControl
+      def={def}
+      angles={angles}
+      onChange={canDrive ? onAnglesChange : () => {}}
+      onCommit={canDrive ? onAnglesCommit : undefined}
+      readOnly={isConnected && !isOverride}
+      collapsed={collapsed}
+      onToggle={onToggle}
+      headerExtra={
+        isConnected ? (
+          isOverride ? (
+            <div className="flex items-center gap-1">
+              {onCopyPose && (
+                <button
+                  onClick={onCopyPose}
+                  className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                  style={{
+                    border: "1px solid rgba(0,200,255,0.40)",
+                    color: "rgba(0,220,255,0.80)",
+                  }}
+                >
+                  Copy Pose
+                </button>
+              )}
+              <button
+                onClick={onReleaseControl}
+                className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                style={{
+                  border: "1px solid rgba(255,100,100,0.50)",
+                  color: "rgba(255,120,120,0.85)",
+                }}
+              >
+                Release Control
+              </button>
             </div>
-            <HudSeparator />
-            <div className="flex flex-col gap-2">
-              {ROBOTICS_TASKS.map((t) => (
-                <HudProgressBar
-                  key={t.label}
-                  label={t.label}
-                  value={t.value}
-                  color={t.color}
-                  animated
-                />
-              ))}
+          ) : (
+            <div className="flex flex-col items-end gap-0.5">
+              <button
+                onClick={onTakeControl}
+                className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
+                style={{
+                  border: `1px solid ${robotConnected ? "rgba(0,255,156,0.50)" : "rgba(255,180,0,0.50)"}`,
+                  color: robotConnected ? "rgba(0,255,156,0.85)" : "rgba(255,180,0,0.85)",
+                }}
+              >
+                Take Control
+              </button>
+              {!robotConnected && (
+                <span className="font-mono" style={{ fontSize: 8, color: "rgba(255,180,0,0.65)" }}>
+                  robot unreachable
+                </span>
+              )}
             </div>
-            <HudSeparator />
-            <div className="flex flex-col gap-1.5">
-              <div className="flex items-center gap-2">
-                <HudStatusDot status="online" size="sm" />
-                <HudLabel text="Uplink nominal" variant="dim" size="xs" mono />
-              </div>
-              <div className="flex items-center gap-2">
-                <HudStatusDot status="warning" size="sm" />
-                <HudLabel text="Left knee encoder drift" variant="dim" size="xs" mono />
-              </div>
-              <div className="flex items-center gap-2">
-                <HudStatusDot status="online" size="sm" />
-                <HudLabel text="Gait model v2.4 loaded" variant="dim" size="xs" mono />
-              </div>
-            </div>
-          </div>
-        </HudPanel>
-      );
-
-    case "imu-live":
-      return <ImuLivePanel collapsed={collapsed} onToggle={onToggle} />;
-
-    case "servo-control": {
-      const isConnected = rosStatus === "connected" || robotConnected;
-      const isOverride = controlMode === "override";
-      const canDrive = !isConnected || isOverride;
-      return (
-        <ServoSliders
-          angles={jointAngles}
-          onChange={canDrive ? onJointAnglesChange : () => {}}
-          onCommit={canDrive ? onJointAnglesCommit : undefined}
-          readOnly={isConnected && !isOverride}
-          panelCollapsed={collapsed}
-          panelOnToggle={onToggle}
-          headerExtra={
-            isConnected ? (
-              isOverride ? (
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={onCopyPose}
-                    className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-                    style={{
-                      border: "1px solid rgba(0,200,255,0.40)",
-                      color: "rgba(0,220,255,0.80)",
-                    }}
-                  >
-                    Copy Pose
-                  </button>
-                  <button
-                    onClick={onReleaseControl}
-                    className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-                    style={{
-                      border: "1px solid rgba(255,100,100,0.50)",
-                      color: "rgba(255,120,120,0.85)",
-                    }}
-                  >
-                    Release Control
-                  </button>
-                </div>
-              ) : (
-                <div className="flex flex-col items-end gap-0.5">
-                  <button
-                    onClick={onTakeControl}
-                    className="rounded px-2 py-0.5 font-mono text-[8px] tracking-widest uppercase transition-colors"
-                    style={{
-                      border: `1px solid ${robotConnected ? "rgba(0,255,156,0.50)" : "rgba(255,180,0,0.50)"}`,
-                      color: robotConnected ? "rgba(0,255,156,0.85)" : "rgba(255,180,0,0.85)",
-                    }}
-                  >
-                    Take Control
-                  </button>
-                  {!robotConnected && (
-                    <span
-                      className="font-mono"
-                      style={{ fontSize: 8, color: "rgba(255,180,0,0.65)" }}
-                    >
-                      robot unreachable
-                    </span>
-                  )}
-                </div>
-              )
-            ) : undefined
-          }
-        />
-      );
-    }
-
-    case "power-draw":
-      return <PowerConsumption angles={jointAngles} collapsed={collapsed} onToggle={onToggle} />;
-
-    default:
-      return null;
-  }
+          )
+        ) : undefined
+      }
+    />
+  );
 }
 
 // ─── Sidebar toggle (header) ──────────────────────────────────────────────────
@@ -661,18 +560,16 @@ function SidebarToggle({
 
 // ─── Robot picker (header) ────────────────────────────────────────────────────
 
-const ROBOTS: { id: RobotModelId; name: string; detail: string }[] = [
-  { id: "optimus", name: "Optimus", detail: "Biped · 14 servos · live robot link" },
-  { id: "spotmicro", name: "Spot Micro", detail: "Quadruped · 12 servos · simulation" },
-];
-
 function RobotPicker({
+  robots,
   value,
   onChange,
 }: {
-  value: RobotModelId;
-  onChange: (id: RobotModelId) => void;
+  robots: RobotDef[];
+  value: string;
+  onChange: (id: string) => void;
 }) {
+  const ROBOTS = robots.map((r) => ({ id: r.id, name: r.name, detail: r.description }));
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const current = ROBOTS.find((r) => r.id === value) ?? ROBOTS[0];
@@ -753,41 +650,45 @@ function RobotPicker({
 
 /**
  * 3D viewer whose parts can be grabbed and dragged to turn the servo behind
- * them. Same rule as the sliders: free while offline, override-only once a
- * robot is connected; releasing commits the pose like releasing a slider.
+ * them. Same rule as the sliders: free while offline (or without a link),
+ * override-only once a robot is connected; releasing commits like a slider.
  */
 function DraggableViewer({
-  jointAngles,
-  onJointAnglesChange,
-  onJointAnglesCommit,
+  def,
+  angles,
+  onAnglesChange,
+  onAnglesCommit,
   controlMode,
   robotConnected,
   autoRotate,
   initialCamera,
+  onModelInfo,
 }: {
-  jointAngles: JointAngles;
-  onJointAnglesChange: (angles: JointAngles) => void;
-  onJointAnglesCommit: (angles: JointAngles) => void;
+  def: RobotDef;
+  angles: ServoAngles;
+  onAnglesChange: (a: ServoAngles) => void;
+  onAnglesCommit: (a: ServoAngles) => void;
   controlMode: "observe" | "override";
   robotConnected: boolean;
   autoRotate: boolean;
   initialCamera: CameraState | null;
+  onModelInfo: (info: ModelInfo) => void;
 }) {
   const rosStatus = useRosStatus();
-  const canDrive = !(rosStatus === "connected" || robotConnected) || controlMode === "override";
+  const connected = hasLink(def) && (rosStatus === "connected" || robotConnected);
+  const canDrive = !connected || controlMode === "override";
 
   return (
     <MujocoViewer
-      compact
+      def={def}
       autoRotate={autoRotate}
-      jointAngles={jointAngles}
+      jointAngles={angles}
       initialCamera={initialCamera}
-      onCameraChange={saveCamera}
-      onJointDrag={
-        canDrive ? (key, rad) => onJointAnglesChange({ ...jointAngles, [key]: rad }) : undefined
-      }
+      onCameraChange={(c) => saveCamera(c, def.id)}
+      onModelInfo={onModelInfo}
+      onJointDrag={canDrive ? (key, rad) => onAnglesChange({ ...angles, [key]: rad }) : undefined}
       onJointDragEnd={
-        canDrive ? (key, rad) => onJointAnglesCommit({ ...jointAngles, [key]: rad }) : undefined
+        canDrive ? (key, rad) => onAnglesCommit({ ...angles, [key]: rad }) : undefined
       }
     />
   );
@@ -852,73 +753,41 @@ function TrustCertBanner() {
   );
 }
 
-// ─── Direct firmware-rl WebSocket sync ───────────────────────────────────────
-
-// UI joint name → firmware-rl joint key.
-const JOINT_MAP: [keyof JointAngles, string][] = [
-  ["Servo-Hip-L", "l_hip_roll"],
-  ["Servo-Knee-L-Top", "l_hip_pitch"],
-  ["Servo-Knee-L-Bottom", "l_knee"],
-  ["Servo-Ankle-L", "l_ankle_roll"],
-  ["Servo-Hip-R", "r_hip_roll"],
-  ["Servo-Knee-R-Top", "r_hip_pitch"],
-  ["Servo-Knee-R-Bottom", "r_knee"],
-  ["Servo-Ankle-R", "r_ankle_roll"],
-  ["Servo-Showlder-L-Front-Back", "l_shoulder_fb"],
-  ["Servo-Showlder-R-Front-Back", "r_shoulder_fb"],
-  ["Servo-Showlder-L-Inward-Outward", "l_shoulder_lat"],
-  ["Servo-Showlder-R-Inward-Outward", "r_shoulder_lat"],
-  ["Servo-Forearm-L", "l_forearm_lat"],
-  ["Servo-Forearm-R", "r_forearm_lat"],
-];
+// ─── Live robot link ──────────────────────────────────────────────────────────
+// Mounted only for robots whose robot.json has a `link`. Servo ids are the
+// firmware joint names, so angles flow both ways without any translation.
 
 /**
- * Bridges firmware-rl WebSocket state into the UI joint/IMU state.
- * In observe mode: mirrors live joint positions into jointAngles.
- * In override mode: sends slider commits as set_joints commands.
+ * Bridges the firmware WebSocket into the UI. Observe: mirrors live servo
+ * angles into the sliders. Override: sends committed poses as set_joints.
  */
 function RobotWsSync({
+  def,
   committedAngles,
   controlMode,
-  onJointAnglesChange,
+  onAnglesChange,
   onRobotConnectedChange,
 }: {
-  committedAngles: JointAngles;
+  def: RobotDef;
+  committedAngles: ServoAngles;
   controlMode: "observe" | "override";
-  onJointAnglesChange: (a: JointAngles) => void;
+  onAnglesChange: (a: ServoAngles) => void;
   onRobotConnectedChange: (connected: boolean) => void;
 }) {
   const { status, state, sendJoints } = useRobotWs();
 
   useEffect(() => {
-    const connected = status === "connected";
-    onRobotConnectedChange(connected);
+    onRobotConnectedChange(status === "connected");
   }, [status, onRobotConnectedChange]);
 
   // Observe: mirror live joint positions into sliders whenever NOT in override.
   useEffect(() => {
     if (controlMode === "override" || !state) return;
-    const fw = state.joints;
-    onJointAnglesChange({
-      "Servo-Hip-L": fw.l_hip_roll,
-      "Servo-Knee-L-Top": fw.l_hip_pitch,
-      "Servo-Knee-L-Bottom": fw.l_knee,
-      "Servo-Ankle-L": fw.l_ankle_roll,
-      "Servo-Hip-R": fw.r_hip_roll,
-      "Servo-Knee-R-Top": fw.r_hip_pitch,
-      "Servo-Knee-R-Bottom": fw.r_knee,
-      "Servo-Ankle-R": fw.r_ankle_roll,
-      "Servo-Showlder-L-Front-Back": fw.l_shoulder_fb,
-      "Servo-Showlder-R-Front-Back": fw.r_shoulder_fb,
-      "Servo-Showlder-L-Inward-Outward": fw.l_shoulder_lat,
-      "Servo-Showlder-R-Inward-Outward": fw.r_shoulder_lat,
-      "Servo-Forearm-L": fw.l_forearm_lat,
-      "Servo-Forearm-R": fw.r_forearm_lat,
-    });
-  }, [state, controlMode, onJointAnglesChange]);
+    onAnglesChange(Object.fromEntries(def.servos.map((s) => [s.id, state.joints[s.id] ?? 0])));
+  }, [state, controlMode, onAnglesChange, def]);
 
   // Override: send slider commits to robot only when user has taken control.
-  const prevRef = useRef<JointAngles | null>(null);
+  const prevRef = useRef<ServoAngles | null>(null);
   useEffect(() => {
     if (status !== "connected" || controlMode !== "override") {
       prevRef.current = null;
@@ -927,18 +796,11 @@ function RobotWsSync({
     const prev = prevRef.current;
     prevRef.current = committedAngles;
     if (!prev) return; // skip first render after taking control
-
-    const all: Record<string, number> = {};
-    for (const [uiKey, fwKey] of JOINT_MAP) {
-      all[fwKey] = committedAngles[uiKey];
-    }
-    sendJoints(all);
+    sendJoints({ ...committedAngles });
   }, [committedAngles, status, controlMode, sendJoints]);
 
   return null;
 }
-
-// ─── ROS joint sync ───────────────────────────────────────────────────────────
 
 interface RosJointState {
   name: string[];
@@ -946,48 +808,47 @@ interface RosJointState {
 }
 
 /**
- * Mounts inside RosProvider. In observe mode, maps /optimus/joint_states
- * (firmware names) into JointAngles (URDF keys) and drives jointAngles.
- * In override mode, publishes slider changes as /optimus/cmd/joint messages.
+ * ROS side of the link (topics from robot.json). Observe: mirrors joint_states
+ * into the sliders. Override: publishes changed servos on pointer-up.
  */
 function RosJointSync({
+  def,
+  topics,
   controlMode,
   committedAngles,
-  onJointAnglesChange,
+  onAnglesChange,
   onRobotConnectedChange,
 }: {
+  def: RobotDef;
+  topics: { jointStates: string; command: string; bridgeStatus: string };
   controlMode: "observe" | "override";
-  committedAngles: JointAngles;
-  onJointAnglesChange: (a: JointAngles) => void;
+  committedAngles: ServoAngles;
+  onAnglesChange: (a: ServoAngles) => void;
   onRobotConnectedChange: (connected: boolean) => void;
 }) {
-  const jointStates = useRosTopic<RosJointState>("/optimus/joint_states", "sensor_msgs/JointState");
-  const bridgeStatus = useRosTopic<{ data: string }>("/optimus/bridge/status", "std_msgs/String");
+  const jointStates = useRosTopic<RosJointState>(topics.jointStates, "sensor_msgs/JointState");
+  const bridgeStatus = useRosTopic<{ data: string }>(topics.bridgeStatus, "std_msgs/String");
   const publish = useRosPublish();
 
   useEffect(() => {
     onRobotConnectedChange(bridgeStatus?.data === "connected");
   }, [bridgeStatus, onRobotConnectedChange]);
 
-  // Observe mode: mirror live joint states into UI
   useEffect(() => {
     if (controlMode !== "observe" || !jointStates) return;
-    const next = { ...DEFAULT_JOINT_ANGLES };
+    const next = zeroAngles(def);
     let changed = false;
-    for (let i = 0; i < jointStates.name.length; i++) {
-      const fwName = jointStates.name[i];
-      const key = FIRMWARE_TO_JOINT[fwName];
-      if (key !== undefined) {
-        const offset = FIRMWARE_TO_URDF_OFFSET[fwName] ?? 0;
-        next[key] = jointStates.position[i] + offset;
+    jointStates.name.forEach((name, i) => {
+      if (name in next) {
+        next[name] = jointStates.position[i];
         changed = true;
       }
-    }
-    if (changed) onJointAnglesChange(next);
-  }, [jointStates, controlMode, onJointAnglesChange]);
+    });
+    if (changed) onAnglesChange(next);
+  }, [jointStates, controlMode, onAnglesChange, def]);
 
   // Override mode: publish on pointerUp (committedAngles), not on every drag tick.
-  const prevCommittedRef = useRef<JointAngles | null>(null);
+  const prevCommittedRef = useRef<ServoAngles | null>(null);
   useEffect(() => {
     if (controlMode !== "override") {
       prevCommittedRef.current = null;
@@ -997,105 +858,55 @@ function RosJointSync({
     prevCommittedRef.current = committedAngles;
     if (!prev) return;
 
-    const names: string[] = [];
-    const positions: number[] = [];
-    for (const [uiKey, fwName] of Object.entries(JOINT_TO_FIRMWARE) as [
-      keyof JointAngles,
-      string,
-    ][]) {
-      if (committedAngles[uiKey] !== prev[uiKey]) {
-        const offset = FIRMWARE_TO_URDF_OFFSET[fwName] ?? 0;
-        names.push(fwName);
-        positions.push(committedAngles[uiKey] - offset);
-      }
-    }
-    if (names.length > 0) {
-      publish("/optimus/cmd/joint", "sensor_msgs/JointState", {
-        name: names,
-        position: positions,
+    const changed = def.servos.filter((s) => committedAngles[s.id] !== prev[s.id]);
+    if (changed.length > 0) {
+      publish(topics.command, "sensor_msgs/JointState", {
+        name: changed.map((s) => s.id),
+        position: changed.map((s) => committedAngles[s.id] ?? 0),
         velocity: [],
         effort: [],
       });
     }
-  }, [committedAngles, controlMode, publish]);
+  }, [committedAngles, controlMode, publish, def, topics.command]);
 
   return null;
+}
+
+/** Wraps children in the robot link providers when the robot has one. */
+function LinkProviders({ def, children }: { def: RobotDef; children: React.ReactNode }) {
+  if (!def.link) return <>{children}</>;
+  const host = process.env.NEXT_PUBLIC_ROBOT_HOST ?? "optimus.local";
+  return (
+    <RobotWsProvider host={host} port={def.link.port}>
+      <RosProvider>{children}</RosProvider>
+    </RobotWsProvider>
+  );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function RoboticsPage() {
-  const [jointAngles, setJointAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
+  const { defs, errors } = useRobotDefs();
+  const [robotId, setRobotId] = useState<string | null>(null);
+  const def = defs?.find((d) => d.id === robotId) ?? defs?.[0] ?? null;
+
+  const [angles, setAngles] = useState<ServoAngles>({});
   // committedAngles only updates on pointerUp — this is what gets published to the robot.
-  const [committedAngles, setCommittedAngles] = useState<JointAngles>(DEFAULT_JOINT_ANGLES);
+  const [committedAngles, setCommittedAngles] = useState<ServoAngles>({});
+  // Which robot `angles` belong to, so a switch never saves one robot's pose under another.
+  const [anglesFor, setAnglesFor] = useState<string | null>(null);
+  const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null);
   const [controlMode, setControlMode] = useState<"observe" | "override">("observe");
   const [robotConnected, setRobotConnected] = useState(false);
-  const handleTakeControl = () => setControlMode("override");
-  const handleReleaseControl = () => setControlMode("observe");
-
-  const handleCopyPose = () => {
-    // Map UI joint key → config.h define name and firmware key
-    const MAP: { uiKey: keyof JointAngles; define: string; fwKey: string }[] = [
-      { uiKey: "Servo-Hip-L", define: "SERVO_OFFSET_DEG_L_HIP_ROLL", fwKey: "l_hip_roll" },
-      { uiKey: "Servo-Knee-L-Top", define: "SERVO_OFFSET_DEG_L_HIP_PITCH", fwKey: "l_hip_pitch" },
-      { uiKey: "Servo-Knee-L-Bottom", define: "SERVO_OFFSET_DEG_L_KNEE", fwKey: "l_knee" },
-      { uiKey: "Servo-Ankle-L", define: "SERVO_OFFSET_DEG_L_ANKLE_ROLL", fwKey: "l_ankle_roll" },
-      { uiKey: "Servo-Hip-R", define: "SERVO_OFFSET_DEG_R_HIP_ROLL", fwKey: "r_hip_roll" },
-      { uiKey: "Servo-Knee-R-Top", define: "SERVO_OFFSET_DEG_R_HIP_PITCH", fwKey: "r_hip_pitch" },
-      { uiKey: "Servo-Knee-R-Bottom", define: "SERVO_OFFSET_DEG_R_KNEE", fwKey: "r_knee" },
-      { uiKey: "Servo-Ankle-R", define: "SERVO_OFFSET_DEG_R_ANKLE_ROLL", fwKey: "r_ankle_roll" },
-      {
-        uiKey: "Servo-Showlder-L-Front-Back",
-        define: "ARM_SERVO_OFFSET_DEG_L_SHOULDER_FB",
-        fwKey: "l_shoulder_fb",
-      },
-      {
-        uiKey: "Servo-Showlder-R-Front-Back",
-        define: "ARM_SERVO_OFFSET_DEG_R_SHOULDER_FB",
-        fwKey: "r_shoulder_fb",
-      },
-      {
-        uiKey: "Servo-Showlder-L-Inward-Outward",
-        define: "ARM_SERVO_OFFSET_DEG_L_SHOULDER_LAT",
-        fwKey: "l_shoulder_lat",
-      },
-      {
-        uiKey: "Servo-Showlder-R-Inward-Outward",
-        define: "ARM_SERVO_OFFSET_DEG_R_SHOULDER_LAT",
-        fwKey: "r_shoulder_lat",
-      },
-      {
-        uiKey: "Servo-Forearm-L",
-        define: "ARM_SERVO_OFFSET_DEG_L_FOREARM_LAT",
-        fwKey: "l_forearm_lat",
-      },
-      {
-        uiKey: "Servo-Forearm-R",
-        define: "ARM_SERVO_OFFSET_DEG_R_FOREARM_LAT",
-        fwKey: "r_forearm_lat",
-      },
-    ];
-    const RAD2DEG = 180 / Math.PI;
-    const lines = MAP.map(({ uiKey, define }) => {
-      const rad = jointAngles[uiKey];
-      const deg = parseFloat((rad * RAD2DEG).toFixed(2));
-      const val = deg >= 0 ? `(+${deg}f)` : `(${deg}f)`;
-      return `#define ${define.padEnd(38)} ${val}`;
-    });
-    const text = "// Copy Pose — paste into firmware-rl/include/config.h\n" + lines.join("\n");
-    navigator.clipboard.writeText(text).catch(() => {});
-    alert(text);
-  };
   const [initialCamera, setInitialCamera] = useState<CameraState | null>(null);
   const [autoRotate, setAutoRotate] = useState(false);
-  const [robot, setRobot] = useState<RobotModelId>("optimus");
-  const [spotAngles, setSpotAngles] = useState<SpotAngles>(DEFAULT_SPOT_ANGLES);
-  const selectRobot = (id: RobotModelId) => {
-    saveRobot(id);
-    setRobot(id);
-  };
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+
+  const selectRobot = (id: string) => {
+    saveRobot(id);
+    setRobotId(id);
+  };
   const toggleLeft = () => {
     saveSidebarOpen("left", !leftOpen);
     setLeftOpen(!leftOpen);
@@ -1105,226 +916,217 @@ export default function RoboticsPage() {
     setRightOpen(!rightOpen);
   };
 
-  // Load persisted camera and joints after first mount (localStorage is client-only).
-  // useLayoutEffect runs before paint, so the restored pose shows without a flash.
+  // Restore UI preferences after first mount (localStorage is client-only).
   useLayoutEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setInitialCamera(loadCamera());
-    const savedJoints = loadJoints();
-    if (savedJoints) setJointAngles(savedJoints);
-    setRobot(loadRobot(["optimus", "spotmicro"] as const) ?? "optimus");
+    setRobotId(loadRobot());
     setLeftOpen(loadSidebarOpen("left") ?? true);
     setRightOpen(loadSidebarOpen("right") ?? true);
   }, []);
 
-  // Save joint angles on change, debounced to avoid hammering localStorage on every slider tick
-  const saveJointsTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whenever the robot changes: restore its saved pose and camera, drop live control.
+  useLayoutEffect(() => {
+    if (!def) return;
+    const saved =
+      loadServoAngles(
+        def.id,
+        def.servos.map((s) => s.id)
+      ) ?? zeroAngles(def);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAngles(saved);
+    setCommittedAngles(saved);
+    setAnglesFor(def.id);
+    setModelInfo(null);
+    setControlMode("observe");
+    setRobotConnected(false);
+    setInitialCamera(loadCamera(def.id));
+  }, [def]);
+
+  // Save the pose on change, debounced to avoid hammering localStorage on every slider tick.
   useEffect(() => {
-    if (saveJointsTimer.current) clearTimeout(saveJointsTimer.current);
-    saveJointsTimer.current = setTimeout(() => saveJoints(jointAngles), 500);
-    return () => {
-      if (saveJointsTimer.current) clearTimeout(saveJointsTimer.current);
-    };
-  }, [jointAngles]);
+    if (!def || anglesFor !== def.id) return;
+    const t = setTimeout(() => saveServoAngles(def.id, angles), 500);
+    return () => clearTimeout(t);
+  }, [angles, def, anglesFor]);
 
   const isMobile = useIsMobile();
 
-  const panelContentProps = {
-    jointAngles,
-    onJointAnglesChange: setJointAngles,
-    onJointAnglesCommit: setCommittedAngles,
-    controlMode,
-    robotConnected,
-    onTakeControl: handleTakeControl,
-    onReleaseControl: handleReleaseControl,
-    onCopyPose: handleCopyPose,
-  };
+  if (!def) {
+    return (
+      <div className="glass-backdrop flex h-screen items-center justify-center p-3">
+        <span className="font-mono text-xs tracking-widest text-white/60 uppercase">
+          {defs
+            ? `No robot definitions could be loaded · ${errors.join(" · ")}`
+            : "Loading robots…"}
+        </span>
+      </div>
+    );
+  }
 
-  const panelSection = (id: PanelId, extra?: Partial<GlassSection>): GlassSection => ({
-    id,
-    ...extra,
+  const handleCopyPose = canCopyPose(def)
+    ? () => {
+        const lines = def.servos.map((s) => {
+          const deg = parseFloat((((angles[s.id] ?? 0) * 180) / Math.PI).toFixed(2));
+          const val = deg >= 0 ? `(+${deg}f)` : `(${deg}f)`;
+          return `#define ${(s.configDefine ?? "").padEnd(38)} ${val}`;
+        });
+        const target = def.link?.copyPoseTarget ?? "config.h";
+        const text = `// Copy Pose — paste into ${target}\n` + lines.join("\n");
+        navigator.clipboard.writeText(text).catch(() => {});
+        alert(text);
+      }
+    : undefined;
+
+  // ── Panels: each shows only if robot.json defines what it needs ──
+  const powerSection: GlassSection | false = hasPower(def) && {
+    id: "power-draw",
     content: (collapsed, onToggle) => (
-      <PanelContent id={id} {...panelContentProps} collapsed={collapsed} onToggle={onToggle} />
+      <PowerConsumption def={def} angles={angles} collapsed={collapsed} onToggle={onToggle} />
     ),
-  });
+  };
+  const imuSection: GlassSection | false = hasImu(def) && {
+    id: "imu-live",
+    content: (collapsed, onToggle) => (
+      <ImuLivePanel model={def.imu!.model} collapsed={collapsed} onToggle={onToggle} />
+    ),
+  };
+  const modelSection: GlassSection = {
+    id: "model",
+    content: (collapsed, onToggle) => (
+      <ModelInfoPanel
+        def={def}
+        info={modelInfo}
+        autoRotate={autoRotate}
+        onToggleRotate={() => setAutoRotate((r) => !r)}
+        collapsed={collapsed}
+        onToggle={onToggle}
+      />
+    ),
+  };
+  const rtosSection: GlassSection | false = hasRtos(def) && {
+    id: "rtos",
+    content: (collapsed, onToggle) => (
+      <FreeRTOSPanel mcu={def.mcu!} collapsed={collapsed} onToggle={onToggle} />
+    ),
+  };
+  const servoSection: GlassSection = {
+    id: "servo-control",
+    content: (collapsed, onToggle) => (
+      <LiveServoControl
+        def={def}
+        angles={angles}
+        onAnglesChange={setAngles}
+        onAnglesCommit={setCommittedAngles}
+        controlMode={controlMode}
+        robotConnected={robotConnected}
+        onTakeControl={() => setControlMode("override")}
+        onReleaseControl={() => setControlMode("observe")}
+        onCopyPose={handleCopyPose}
+        collapsed={collapsed}
+        onToggle={onToggle}
+      />
+    ),
+  };
+  const present = (xs: (GlassSection | false)[]) => xs.filter((x): x is GlassSection => !!x);
+  const leftSections = present([powerSection, imuSection, modelSection]);
+  const rightSections = present([rtosSection, servoSection]);
 
-  const leftSections: GlassSection[] = [
-    panelSection("power-draw"),
-    panelSection("imu-live"),
-    {
-      id: "mujoco",
-      content: (collapsed, onToggle) => (
-        <MujocoInfoPanel
-          autoRotate={autoRotate}
-          onToggleRotate={() => setAutoRotate((r) => !r)}
-          collapsed={collapsed}
-          onToggle={onToggle}
-        />
-      ),
-    },
-  ];
-
-  const rightSections: GlassSection[] = [
-    panelSection("system-metrics"),
-    panelSection("servo-control"),
-  ];
-
-  // Spot Micro has no live link or Optimus hardware panels: just its servos.
-  const spotSections: GlassSection[] = [
-    {
-      id: "spot-servo-control",
-      content: (collapsed, onToggle) => (
-        <SpotServoSliders
-          angles={spotAngles}
-          onChange={setSpotAngles}
-          collapsed={collapsed}
-          onToggle={onToggle}
-        />
-      ),
-    },
-  ];
-  const isOptimus = robot === "optimus";
-
-  const robotHost = process.env.NEXT_PUBLIC_ROBOT_HOST ?? "optimus.local";
+  const viewer = (
+    <DraggableViewer
+      key={def.id}
+      def={def}
+      angles={angles}
+      onAnglesChange={setAngles}
+      onAnglesCommit={setCommittedAngles}
+      controlMode={controlMode}
+      robotConnected={robotConnected}
+      autoRotate={autoRotate}
+      initialCamera={initialCamera}
+      onModelInfo={setModelInfo}
+    />
+  );
 
   return (
-    <RobotWsProvider host={robotHost}>
-      <RosProvider>
-        <RobotWsSync
-          committedAngles={committedAngles}
-          controlMode={controlMode}
-          onJointAnglesChange={setJointAngles}
-          onRobotConnectedChange={setRobotConnected}
-        />
-        <RosJointSync
-          controlMode={controlMode}
-          committedAngles={committedAngles}
-          onJointAnglesChange={(a) => {
-            setJointAngles(a);
-            setCommittedAngles(a);
-          }}
-          onRobotConnectedChange={setRobotConnected}
-        />
-
-        {/* ── Mobile layout ───────────────────────────────────────────── */}
-        {isMobile === true && (
-          <MobileScrollLayout
-            viewer={
-              <MujocoViewer
-                jointAngles={jointAngles}
-                initialCamera={initialCamera}
-                onCameraChange={saveCamera}
-                compact
-              />
-            }
-            panels={[
-              {
-                id: "imu-live",
-                defaultCollapsed: false,
-                content: (collapsed, onToggle) => (
-                  <PanelContent
-                    id="imu-live"
-                    {...panelContentProps}
-                    collapsed={collapsed}
-                    onToggle={onToggle}
-                  />
-                ),
-              },
-              {
-                id: "servo-control",
-                defaultCollapsed: false,
-                content: (collapsed, onToggle) => (
-                  <PanelContent
-                    id="servo-control"
-                    {...panelContentProps}
-                    collapsed={collapsed}
-                    onToggle={onToggle}
-                  />
-                ),
-              },
-              {
-                id: "system-metrics",
-                defaultCollapsed: true,
-                content: (collapsed, onToggle) => (
-                  <PanelContent
-                    id="system-metrics"
-                    {...panelContentProps}
-                    collapsed={collapsed}
-                    onToggle={onToggle}
-                  />
-                ),
-              },
-              {
-                id: "power-draw",
-                defaultCollapsed: true,
-                content: (collapsed, onToggle) => (
-                  <PanelContent
-                    id="power-draw"
-                    {...panelContentProps}
-                    collapsed={collapsed}
-                    onToggle={onToggle}
-                  />
-                ),
-              },
-            ]}
+    <LinkProviders key={def.id} def={def}>
+      {def.link && (
+        <>
+          <RobotWsSync
+            def={def}
+            committedAngles={committedAngles}
+            controlMode={controlMode}
+            onAnglesChange={setAngles}
+            onRobotConnectedChange={setRobotConnected}
           />
-        )}
+          {def.link.ros && (
+            <RosJointSync
+              def={def}
+              topics={def.link.ros}
+              controlMode={controlMode}
+              committedAngles={committedAngles}
+              onAnglesChange={(a) => {
+                setAngles(a);
+                setCommittedAngles(a);
+              }}
+              onRobotConnectedChange={setRobotConnected}
+            />
+          )}
+        </>
+      )}
 
-        {/* ── Desktop layout: glass sidebars around the 3D viewer ─────── */}
-        {isMobile !== true && (
-          <div className="glass-backdrop flex h-screen flex-col gap-3 overflow-hidden p-3">
-            {/* ── TLS cert trust prompt ─────────────────────────────────── */}
-            <TrustCertBanner />
-            {/* ── Header ───────────────────────────────────────────────── */}
-            {/* z-30: keeps the robot menu above the sidebars, which stack later */}
-            <header className="glass-panel relative z-30 flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
-              <div className="flex items-center gap-3">
-                {isOptimus && <SidebarToggle side="left" open={leftOpen} onClick={toggleLeft} />}
-                <HudStatusDot status="online" size="md" pulse />
-                <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
-                  Nexus Robotics
-                </span>
-                <HudBadge variant="info" label="PROTO-02" size="sm" />
-                <RobotPicker value={robot} onChange={selectRobot} />
-              </div>
-              <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
-            </header>
+      {/* ── Mobile layout ───────────────────────────────────────────── */}
+      {isMobile === true && (
+        <MobileScrollLayout
+          viewer={viewer}
+          panels={present([
+            imuSection,
+            servoSection,
+            rtosSection && { ...rtosSection, defaultCollapsed: true },
+            powerSection && { ...powerSection, defaultCollapsed: true },
+            { ...modelSection, defaultCollapsed: true },
+          ]).map((s) => ({
+            id: s.id,
+            defaultCollapsed: s.defaultCollapsed ?? false,
+            content: s.content,
+          }))}
+        />
+      )}
 
-            <div className="flex min-h-0 flex-1 gap-3">
-              {isOptimus && <GlassSidebar side="left" open={leftOpen} sections={leftSections} />}
-
-              <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
-                {isOptimus ? (
-                  <DraggableViewer
-                    key="optimus"
-                    jointAngles={jointAngles}
-                    onJointAnglesChange={setJointAngles}
-                    onJointAnglesCommit={setCommittedAngles}
-                    controlMode={controlMode}
-                    robotConnected={robotConnected}
-                    autoRotate={autoRotate}
-                    initialCamera={initialCamera}
-                  />
-                ) : (
-                  <MujocoViewer
-                    key="spotmicro"
-                    robot="spotmicro"
-                    compact
-                    jointAngles={spotAngles}
-                    onJointDrag={(key, rad) => setSpotAngles((a) => ({ ...a, [key]: rad }))}
-                  />
-                )}
-              </main>
-
-              <GlassSidebar
-                side="right"
-                open={rightOpen}
-                sections={isOptimus ? rightSections : spotSections}
-              />
+      {/* ── Desktop layout: glass sidebars around the 3D viewer ─────── */}
+      {isMobile !== true && (
+        <div className="glass-backdrop flex h-screen flex-col gap-3 overflow-hidden p-3">
+          {/* ── TLS cert trust prompt ─────────────────────────────────── */}
+          {def.link?.ros && <TrustCertBanner />}
+          {errors.length > 0 && (
+            <div className="shrink-0 rounded-xl border border-amber-400/40 bg-amber-400/10 px-3 py-2 font-mono text-[11px] text-amber-200/90">
+              Some robot definitions failed to load: {errors.join(" · ")}
             </div>
+          )}
+          {/* ── Header ───────────────────────────────────────────────── */}
+          {/* z-30: keeps the robot menu above the sidebars, which stack later */}
+          <header className="glass-panel relative z-30 flex shrink-0 items-center justify-between rounded-2xl px-3 py-2">
+            <div className="flex items-center gap-3">
+              <SidebarToggle side="left" open={leftOpen} onClick={toggleLeft} />
+              <HudStatusDot status="online" size="md" pulse />
+              <span className="font-display text-hud-primary text-xl font-bold tracking-[0.25em] uppercase">
+                Nexus Robotics
+              </span>
+              <HudBadge variant="info" label="PROTO-02" size="sm" />
+              <RobotPicker robots={defs ?? []} value={def.id} onChange={selectRobot} />
+            </div>
+            <SidebarToggle side="right" open={rightOpen} onClick={toggleRight} />
+          </header>
+
+          <div className="flex min-h-0 flex-1 gap-3">
+            <GlassSidebar side="left" open={leftOpen} sections={leftSections} />
+
+            <main className="glass-panel relative min-w-0 flex-1 overflow-hidden rounded-3xl">
+              {viewer}
+            </main>
+
+            <GlassSidebar side="right" open={rightOpen} sections={rightSections} />
           </div>
-        )}
-      </RosProvider>
-    </RobotWsProvider>
+        </div>
+      )}
+    </LinkProviders>
   );
 }

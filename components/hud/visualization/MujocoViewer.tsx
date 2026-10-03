@@ -294,8 +294,15 @@ function URDFRobot({
           camera.position.set(initialCamera.px, initialCamera.py, initialCamera.pz);
           controlsRef.current.target.set(initialCamera.tx, initialCamera.ty, initialCamera.tz);
         } else {
-          // Default: orbit around model center
-          const modelCenter = new THREE.Vector3(0, (box.max.y - box.min.y) / 2, 0);
+          // Default: orbit around model center, far enough to fit the model
+          const size = box.getSize(new THREE.Vector3());
+          const modelCenter = new THREE.Vector3(0, size.y / 2, 0);
+          const fov = (camera as THREE.PerspectiveCamera).fov ?? 44;
+          const fit = (Math.max(size.x, size.y, size.z) / 2 / Math.tan((fov * D2R) / 2)) * 1.6;
+          const dir = camera.position.clone().sub(controlsRef.current.target).normalize();
+          camera.position
+            .copy(modelCenter)
+            .addScaledVector(dir, Math.min(5.5, Math.max(0.35, fit)));
           controlsRef.current.target.copy(modelCenter);
         }
         controlsRef.current.update();

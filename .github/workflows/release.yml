@@ -2,8 +2,9 @@ name: Release
 
 # On every push to main: work out the next semver from the Conventional Commits
 # since the last tag (.github/scripts/next-version.sh), build the standalone
-# Next.js bundle and publish it as a GitHub release. No release-worthy commits
-# (only chore/ci/docs/…) → nothing is published.
+# Next.js bundle, publish it as a GitHub release and deploy that commit to
+# Vercel production. No release-worthy commits (only chore/ci/docs/…) →
+# nothing is published or deployed.
 on:
   push:
     branches: [main]
@@ -87,3 +88,34 @@ jobs:
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --notes-file release-notes.md
+
+  # Production deploy of the released commit. Pushes to main don't deploy on
+  # their own (vercel.json); PR branches still get preview deployments.
+  deploy:
+    name: Deploy ${{ needs.version.outputs.tag }} to Vercel
+    needs: [version, release]
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+      NEXT_TELEMETRY_DISABLED: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Deploy
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::warning::VERCEL_TOKEN secret not set — skipping the Vercel deploy."
+            exit 0
+          fi
+          npm install --global vercel@latest
+          vercel pull --yes --environment=production --token="$VERCEL_TOKEN"
+          vercel build --prod --token="$VERCEL_TOKEN"
+          url=$(vercel deploy --prebuilt --prod --token="$VERCEL_TOKEN")
+          echo "Deployed $url" >> "$GITHUB_STEP_SUMMARY"

@@ -174,7 +174,12 @@ scripts/validate-robots.mjs # CI check for robot definitions
 
 ## Contributing
 
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/); the `commit-msg` hook ([`.husky/commit-msg`](.husky/commit-msg)) rejects anything else. Pull requests use the [template](.github/pull_request_template.md).
+Every commit is checked locally by [husky](https://typicode.github.io/husky/):
+
+- **pre-commit** ([`.husky/pre-commit`](.husky/pre-commit)) — ESLint (no warnings allowed) and Prettier on the staged files, then `tsc` on the whole project.
+- **commit-msg** ([`.husky/commit-msg`](.husky/commit-msg)) — the subject must follow [Conventional Commits](https://www.conventionalcommits.org/).
+
+CI runs the same lint and type checks, plus robot validation and a production build. Pull requests use the [template](.github/pull_request_template.md).
 
 ## Releases
 

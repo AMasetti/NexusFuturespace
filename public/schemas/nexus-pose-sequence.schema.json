@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://robotics.amasetti.com/schemas/nexus-pose-sequence.schema.json",
+  "title": "nexus-pose-sequence",
+  "description": "A pose sequence: keyframes for futurespace's pose timeline plus the sampled trajectory. Written by futurespace's Export and by nexus-data replay; read by futurespace's Import. Angles are radians around each servo's zero.",
+  "type": "object",
+  "required": ["format", "version", "robot", "poses"],
+  "properties": {
+    "format": { "const": "nexus-pose-sequence" },
+    "version": { "const": 1 },
+    "robot": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Robot id: the folder under public/models."
+    },
+    "name": { "type": "string", "maxLength": 40 },
+    "angleUnit": { "const": "rad" },
+    "interpolation": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "enum": ["sigmoid", "linear"],
+          "description": "sigmoid: ease between poses. linear: a recorded trajectory, played frame by frame."
+        },
+        "k": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "loop": { "type": "boolean" },
+    "durationS": { "type": "number", "minimum": 0 },
+    "source": {
+      "type": "object",
+      "description": "Where a recorded sequence came from (nexus-data).",
+      "properties": {
+        "episode": { "type": "string" },
+        "recording": { "type": "string" },
+        "kind": { "enum": ["real", "sim"] }
+      }
+    },
+    "servos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string" },
+          "label": { "type": "string" },
+          "channel": { "type": ["integer", "null"] },
+          "limitsDeg": {
+            "type": "array",
+            "items": { "type": "number" },
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      }
+    },
+    "poses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["angles"],
+        "properties": {
+          "name": { "type": "string" },
+          "timeS": { "type": "number", "minimum": 0 },
+          "durationS": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "description": "Seconds to move here from the previous pose; for pose 1, the loop's return time."
+          },
+          "angles": {
+            "type": "object",
+            "additionalProperties": { "type": "number" },
+            "description": "Servo id → angle (radians)."
+          }
+        }
+      }
+    },
+    "trajectory": {
+      "type": "object",
+      "required": ["hz", "servoOrder", "frames"],
+      "properties": {
+        "hz": { "type": "number", "exclusiveMinimum": 0 },
+        "servoOrder": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "frames": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" } },
+          "description": "One row per frame, angles in servoOrder."
+        }
+      }
+    }
+  }
+}

@@ -168,3 +168,22 @@ export function saveRobot(robot: string): void {
     /* quota exceeded — ignore */
   }
 }
+
+const KEY_OPERATOR = "robotics:operator:v1";
+
+/** Who records episodes from the Record panel, remembered between sessions. */
+export function loadOperator(): string | null {
+  try {
+    return localStorage.getItem(KEY_OPERATOR);
+  } catch {
+    return null;
+  }
+}
+
+export function saveOperator(name: string): void {
+  try {
+    localStorage.setItem(KEY_OPERATOR, name);
+  } catch {
+    /* quota exceeded — ignore */
+  }
+}

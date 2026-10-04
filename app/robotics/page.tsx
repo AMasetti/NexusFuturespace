@@ -18,6 +18,7 @@ import { Check, ChevronDown, PanelBottom, PanelLeft, PanelRight } from "lucide-r
 import { ServoControl } from "@/components/hud/panels/ServoControl";
 import { PowerConsumption } from "@/components/hud/panels/PowerConsumption";
 import { PoseTimeline } from "@/components/hud/panels/PoseTimeline";
+import { RecordPanel } from "@/components/hud/panels/RecordPanel";
 import {
   exportSequence,
   nameFromFileName,
@@ -38,6 +39,7 @@ import {
   hasPower,
   hasRtos,
   hasLink,
+  hasRecorder,
   zeroAngles,
   type McuDef,
   type RobotDef,
@@ -1155,9 +1157,17 @@ export default function RoboticsPage() {
       />
     ),
   };
+  const recorderTopics = def.link?.ros?.recorder;
+  const recordSection: GlassSection | false = hasRecorder(def) &&
+    !!recorderTopics && {
+      id: "record",
+      content: (collapsed, onToggle) => (
+        <RecordPanel topics={recorderTopics} collapsed={collapsed} onToggle={onToggle} />
+      ),
+    };
   const present = (xs: (GlassSection | false)[]) => xs.filter((x): x is GlassSection => !!x);
   const leftSections = present([powerSection, imuSection, modelSection]);
-  const rightSections = present([rtosSection, servoSection]);
+  const rightSections = present([rtosSection, servoSection, recordSection]);
 
   const viewer = (
     <DraggableViewer
@@ -1262,6 +1272,7 @@ export default function RoboticsPage() {
             sections={present([
               !!sequence && { id: "timeline", content: () => timeline(true) },
               servoSection,
+              recordSection,
               imuSection,
               powerSection && { ...powerSection, defaultCollapsed: true },
               rtosSection && { ...rtosSection, defaultCollapsed: true },

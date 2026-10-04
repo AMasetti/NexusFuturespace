@@ -74,7 +74,13 @@ export interface RobotDef {
   link?: {
     protocol: "firmware-ws";
     port: number;
-    ros?: { jointStates: string; command: string; bridgeStatus: string };
+    ros?: {
+      jointStates: string;
+      command: string;
+      bridgeStatus: string;
+      /** nexus-data recorder (docker/recorder): JSON commands in, JSON status out. */
+      recorder?: { command: string; status: string };
+    };
     copyPoseTarget?: string;
   };
 }
@@ -174,6 +180,12 @@ export function parseRobotDef(raw: unknown, id: string, baseUrl: string): RobotD
   const link = isObj(raw.link) ? raw.link : undefined;
   if (link && (link.protocol !== "firmware-ws" || !isNum(link.port)))
     err('link: { protocol: "firmware-ws", port }');
+  const recorder = isObj(link?.ros) ? (link.ros as Record<string, unknown>).recorder : undefined;
+  if (
+    recorder !== undefined &&
+    !(isObj(recorder) && isStr(recorder.command) && isStr(recorder.status))
+  )
+    err("link.ros.recorder: { command, status } topic names");
 
   if (errors.length) throw new Error(`${id}/robot.json:\n  - ${errors.join("\n  - ")}`);
 
@@ -211,6 +223,8 @@ export const hasPower = (d: RobotDef) =>
 export const hasImu = (d: RobotDef) => !!d.imu && !!d.link;
 export const hasRtos = (d: RobotDef) => !!d.mcu?.rtos;
 export const hasLink = (d: RobotDef) => !!d.link;
+/** The Record panel drives the recorder over rosbridge. */
+export const hasRecorder = (d: RobotDef) => !!d.link?.ros?.recorder;
 export const canCopyPose = (d: RobotDef) => hasLink(d) && d.servos.every((s) => s.configDefine);
 
 /** Servo groups in file order. */

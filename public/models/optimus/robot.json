@@ -203,7 +203,11 @@
     "ros": {
       "jointStates": "/optimus/joint_states",
       "command": "/optimus/cmd/joint",
-      "bridgeStatus": "/optimus/bridge/status"
+      "bridgeStatus": "/optimus/bridge/status",
+      "recorder": {
+        "command": "/nexus/recorder/command",
+        "status": "/nexus/recorder/status"
+      }
     },
     "copyPoseTarget": "firmware-rl/include/config.h"
   }

@@ -9,7 +9,7 @@
       "label": "Hip Roll L",
       "group": "Left Leg",
       "channel": 12,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-45, 45],
       "joints": [{ "joint": "Servo-Hip-L", "scale": 1 }],
       "type": "SG995",
       "configDefine": "SERVO_OFFSET_DEG_L_HIP_ROLL"
@@ -19,7 +19,7 @@
       "label": "Hip Pitch L",
       "group": "Left Leg",
       "channel": 13,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-45, 45],
       "joints": [
         { "joint": "Unactuated-Knee-L-Top", "scale": -1 },
         { "joint": "Unactuated-Tendon-L-Top", "scale": -1 },
@@ -34,7 +34,7 @@
       "label": "Knee Bend L",
       "group": "Left Leg",
       "channel": 14,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-70, 70],
       "joints": [
         { "joint": "Servo-Knee-L-Bottom", "scale": -1 },
         { "joint": "Unactuated-Knee-L-Bottom", "scale": 1 },
@@ -58,7 +58,7 @@
       "label": "Hip Roll R",
       "group": "Right Leg",
       "channel": 3,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-45, 45],
       "joints": [{ "joint": "Servo-Hip-R", "scale": 1 }],
       "type": "SG995",
       "configDefine": "SERVO_OFFSET_DEG_R_HIP_ROLL"
@@ -68,7 +68,7 @@
       "label": "Hip Pitch R",
       "group": "Right Leg",
       "channel": 2,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-45, 45],
       "joints": [
         { "joint": "Unactuated-Knee-R-Top", "scale": -1 },
         { "joint": "Unactuated-Tendon-R-Top", "scale": -1 },
@@ -83,7 +83,7 @@
       "label": "Knee Bend R",
       "group": "Right Leg",
       "channel": 1,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-70, 70],
       "joints": [
         { "joint": "Servo-Knee-R-Bottom", "scale": 1 },
         { "joint": "Unactuated-Knee-R-Bottom", "scale": -1 },
@@ -107,7 +107,7 @@
       "label": "Shoulder FB L",
       "group": "Arm Left",
       "channel": 7,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-120, 120],
       "joints": [{ "joint": "Servo-Showlder-L-Front-Back", "scale": 1 }],
       "type": "S3003",
       "configDefine": "ARM_SERVO_OFFSET_DEG_L_SHOULDER_FB"
@@ -117,7 +117,7 @@
       "label": "Shoulder Lat L",
       "group": "Arm Left",
       "channel": 8,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-120, 120],
       "joints": [{ "joint": "Servo-Showlder-L-Inward-Outward", "scale": -1, "offsetDeg": -90 }],
       "type": "S3003",
       "configDefine": "ARM_SERVO_OFFSET_DEG_L_SHOULDER_LAT"
@@ -137,7 +137,7 @@
       "label": "Shoulder FB R",
       "group": "Arm Right",
       "channel": 4,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-120, 120],
       "joints": [{ "joint": "Servo-Showlder-R-Front-Back", "scale": -1 }],
       "type": "S3003",
       "configDefine": "ARM_SERVO_OFFSET_DEG_R_SHOULDER_FB"
@@ -147,7 +147,7 @@
       "label": "Shoulder Lat R",
       "group": "Arm Right",
       "channel": 5,
-      "limitsDeg": [-90, 90],
+      "limitsDeg": [-120, 120],
       "joints": [{ "joint": "Servo-Showlder-R-Inward-Outward", "scale": 1, "offsetDeg": -90 }],
       "type": "S3003",
       "configDefine": "ARM_SERVO_OFFSET_DEG_R_SHOULDER_LAT"

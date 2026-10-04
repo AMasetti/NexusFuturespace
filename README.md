@@ -71,7 +71,7 @@ Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`
   "label": "Hip Pitch L",
   "group": "Left Leg",
   "channel": 13,
-  "limitsDeg": [-90, 90],
+  "limitsDeg": [-45, 45],
   "joints": [
     { "joint": "Unactuated-Knee-L-Top", "scale": -1 },
     { "joint": "Unactuated-Tendon-L-Top", "scale": -1 },
@@ -115,7 +115,7 @@ Exported files are meant to be replayed by a program:
   "interpolation": { "type": "sigmoid", "k": 10 },
   "loop": true,
   "durationS": 3,
-  "servos": [{ "id": "l_hip_roll", "label": "Hip Roll L", "channel": 12, "limitsDeg": [-90, 90] }],
+  "servos": [{ "id": "l_hip_roll", "label": "Hip Roll L", "channel": 12, "limitsDeg": [-45, 45] }],
   "poses": [{ "name": "Pose 1", "timeS": 0, "durationS": 1, "angles": { "l_hip_roll": 0.17453 } }],
   "trajectory": { "hz": 50, "servoOrder": ["l_hip_roll"], "frames": [[0.17453]] },
 }

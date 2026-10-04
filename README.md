@@ -43,6 +43,7 @@ npm run dev               # Dev server with hot reload
 npm run build             # Production build (standalone)
 npm run check             # tsc + eslint + robot definition validation
 npm run validate:robots   # Check every robot.json against its URDF
+npm run validate:sequences  # Check exported sequences against their JSON Schema
 npm run format            # Prettier
 ```
 
@@ -119,6 +120,8 @@ Exported files are meant to be replayed by a program:
   "trajectory": { "hz": 50, "servoOrder": ["l_hip_roll"], "frames": [[0.17453]] },
 }
 ```
+
+The format is published as a JSON Schema at [`public/schemas/nexus-pose-sequence.schema.json`](public/schemas/nexus-pose-sequence.schema.json) (also served by the live demo at `/schemas/`). CI validates futurespace's own exports against it, and nexus-data validates its replay files against the same schema, so neither side can change the format without the other noticing.
 
 `trajectory.frames` is the whole motion pre-sampled at 50 Hz — one row per tick, angles in `servoOrder` — so a player can stream it to the servos without reimplementing the curve. To interpolate the keyframes yourself, each joint follows `a + (b − a) · s(u)`, where `u` is the fraction of the transition elapsed and `s` is the logistic `1 / (1 + e^(−k(u − ½)))` rescaled to run from 0 to 1.
 

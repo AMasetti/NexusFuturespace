@@ -8,6 +8,7 @@ on:
       - 'components/**'
       - 'lib/**'
       - 'public/**'
+      - 'docs/*.json'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -20,6 +21,7 @@ on:
       - 'components/**'
       - 'lib/**'
       - 'public/**'
+      - 'docs/*.json'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -51,6 +53,9 @@ jobs:
 
       - name: Validate robot definitions
         run: npm run validate:robots
+
+      - name: Validate pose sequences against their schema
+        run: npm run validate:sequences
 
       - name: Build
         run: npm run build

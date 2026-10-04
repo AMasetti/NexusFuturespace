@@ -16,6 +16,7 @@ Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4 and Th
 - **Power Draw** — modelled current per servo group with session peak, average and energy, plus a reset.
 - **IMU, FreeRTOS and Model panels** — shown only for robots whose definition describes that hardware.
 - **Pose timeline** — build motions as a sequence of poses with editable transition times, play them once or in a loop, and export them for your own programs.
+- **Record** — label a task, press Record, and the robot's topics are saved as an MCAP episode for the [nexus-data](https://github.com/AMasetti/Nexus-Data) pipeline.
 - **Glass layout** — frosted sidebars you can resize (drag the pill grip, double-click to reset) and hide from the header; widths, pose, camera and robot choice are remembered.
 - **Phone layout** — the same features on a phone: the viewer on top and every panel, timeline included, in one bottom sheet you resize with its pill and hide from the header.
 
@@ -59,6 +60,7 @@ Each robot is a folder in `public/models/<id>/` with its URDF, meshes and a `rob
 | IMU           | `imu` and a `link` (its data comes from the robot)         |    ✓    |            |
 | FreeRTOS      | `mcu.rtos`                                                 |    ✓    |            |
 | Take Control  | `link` — live WebSocket/ROS connection to the robot        |    ✓    |            |
+| Record        | `link.ros.recorder` — the nexus-data recorder's topics     |    ✓    |            |
 
 Each servo lists the URDF joints it turns as `urdf = scale · servo + offsetDeg`, so signs, offsets and linkages (several joints per one servo) are data, not code:
 
@@ -174,6 +176,8 @@ The firmware's WebSocket is plain `ws://`, so that link only runs when the UI is
 | **Override**          | **Take Control** makes sliders and 3D drag interactive; each released slider or drag is sent to the robot. **Copy Pose** exports the pose as firmware `#define`s. **Release Control** hands back. |
 
 Topic names, the WebSocket port and the Copy Pose target all come from the `link` section of `robot.json`.
+
+**Recording episodes.** The Record panel drives the recorder in the Docker stack through rosbridge: it publishes `{"action": "start", "task", "operator", "notes"}` or `{"action": "stop"}` as JSON on `/nexus/recorder/command` and shows the JSON state the recorder publishes on `/nexus/recorder/status`. Each episode lands as a rosbag2 MCAP folder in the nexus-data landing area; `make data-ingest` in the workspace checks it into the lake, and `make data-replay` exports it back for the pose timeline.
 
 ## Docker
 

@@ -17,12 +17,42 @@ export interface Pose {
   durationS: number;
 }
 
+/**
+ * Frames recorded on the robot and exported by nexus-data. While present, playback
+ * steps through them exactly (linear between frames) instead of easing between poses;
+ * the poses are its keyframes, shown on the timeline.
+ */
+export interface RecordedTrajectory {
+  hz: number;
+  /** One row per frame, angles in the robot definition's servo order (radians). */
+  frames: number[][];
+  /** nexus-data episode id, kept through export. */
+  episode?: string;
+}
+
 export interface Sequence {
   /** Animation name, e.g. "wave" — used in the export file name. */
   name: string;
   poses: Pose[];
   loop: boolean;
+  recording?: RecordedTrajectory;
 }
+
+/**
+ * Whether `next` changes what a recording shows: pose angles, timing, order or count.
+ * Renaming a pose or the sequence, or toggling loop, keeps the recording.
+ */
+export function editsMotion(prev: Sequence, next: Sequence): boolean {
+  if (prev.poses.length !== next.poses.length) return true;
+  return prev.poses.some((p, i) => {
+    const q = next.poses[i];
+    return p.id !== q.id || p.durationS !== q.durationS || p.angles !== q.angles;
+  });
+}
+
+/** Keeps the recording only while the motion is unchanged. */
+export const withMotionEdit = (prev: Sequence, next: Sequence): Sequence =>
+  next.recording && editsMotion(prev, next) ? { ...next, recording: undefined } : next;
 
 export const DEFAULT_SEQUENCE_NAME = "untitled";
 const MAX_NAME = 40;
@@ -100,6 +130,7 @@ export function segments(seq: Sequence): Segment[] {
 }
 
 export function totalDuration(seq: Sequence): number {
+  if (seq.recording) return (seq.recording.frames.length - 1) / seq.recording.hz;
   return segments(seq).reduce((sum, s) => sum + s.duration, 0);
 }
 
@@ -112,6 +143,7 @@ export function poseTimes(seq: Sequence): number[] {
 
 /** Angles at time t (seconds from pose 1). */
 export function sampleAt(seq: Sequence, t: number, servoIds: string[]): ServoAngles {
+  if (seq.recording) return sampleRecording(seq.recording, t, servoIds);
   const segs = segments(seq);
   if (segs.length === 0) return { ...seq.poses[0].angles };
   const seg = segs.find((s) => t < s.start + s.duration) ?? segs[segs.length - 1];
@@ -122,6 +154,19 @@ export function sampleAt(seq: Sequence, t: number, servoIds: string[]): ServoAng
     const b = seg.to.angles[id] ?? 0;
     out[id] = a + (b - a) * e;
   }
+  return out;
+}
+
+function sampleRecording(rec: RecordedTrajectory, t: number, servoIds: string[]): ServoAngles {
+  const last = rec.frames.length - 1;
+  const f = Math.min(last, Math.max(0, t * rec.hz));
+  const i = Math.min(last, Math.floor(f));
+  const j = Math.min(last, i + 1);
+  const u = f - i;
+  const out: ServoAngles = {};
+  servoIds.forEach((id, k) => {
+    out[id] = rec.frames[i][k] + (rec.frames[j][k] - rec.frames[i][k]) * u;
+  });
   return out;
 }
 
@@ -147,19 +192,22 @@ export function exportSequence(def: RobotDef, seq: Sequence) {
   const ids = def.servos.map((s) => s.id);
   const total = totalDuration(seq);
   const times = poseTimes(seq);
-  const frames: number[][] = [];
-  const n = Math.max(1, Math.round(total * EXPORT_HZ) + 1);
-  for (let k = 0; k < n; k++) {
-    const a = sampleAt(seq, Math.min(total, k / EXPORT_HZ), ids);
-    frames.push(ids.map((id) => Number(a[id].toFixed(5))));
-  }
+  const rec = seq.recording;
+  const hz = rec?.hz ?? EXPORT_HZ;
+  const frames: number[][] = rec
+    ? rec.frames
+    : Array.from({ length: Math.max(1, Math.round(total * EXPORT_HZ) + 1) }, (_, k) => {
+        const a = sampleAt(seq, Math.min(total, k / EXPORT_HZ), ids);
+        return ids.map((id) => Number(a[id].toFixed(5)));
+      });
   return {
     format: SEQUENCE_FORMAT,
     version: 1,
     robot: def.id,
     name: seq.name,
     angleUnit: "rad",
-    interpolation: { type: "sigmoid", k: SIGMOID_K },
+    interpolation: rec ? { type: "linear" } : { type: "sigmoid", k: SIGMOID_K },
+    ...(rec?.episode ? { source: { episode: rec.episode } } : {}),
     loop: seq.loop,
     durationS: Number(total.toFixed(3)),
     servos: def.servos.map((s) => ({
@@ -174,7 +222,7 @@ export function exportSequence(def: RobotDef, seq: Sequence) {
       durationS: p.durationS,
       angles: Object.fromEntries(ids.map((id) => [id, Number((p.angles[id] ?? 0).toFixed(5))])),
     })),
-    trajectory: { hz: EXPORT_HZ, servoOrder: ids, frames },
+    trajectory: { hz, servoOrder: ids, frames },
   };
 }
 
@@ -212,5 +260,37 @@ export function parseSequence(raw: unknown, def: RobotDef): Sequence {
     typeof r.name === "string" && r.name.trim()
       ? r.name.trim().slice(0, MAX_NAME)
       : DEFAULT_SEQUENCE_NAME;
-  return { name, poses, loop: r.loop === true };
+  return { name, poses, loop: r.loop === true, recording: parseRecording(r, def) };
+}
+
+/**
+ * A recorded trajectory, from an export with linear interpolation (nexus-data replay)
+ * or from the browser's saved copy. Columns are matched by servo id and clamped.
+ */
+function parseRecording(r: Record<string, unknown>, def: RobotDef): RecordedTrajectory | undefined {
+  const obj = (v: unknown) =>
+    typeof v === "object" && v !== null ? (v as Record<string, unknown>) : null;
+  let hz: unknown, frames: unknown, order: unknown, episode: unknown;
+  const saved = obj(r.recording);
+  const traj = obj(r.trajectory);
+  if (saved) {
+    ({ hz, frames } = saved);
+    order = def.servos.map((s) => s.id);
+    episode = saved.episode;
+  } else if (traj && obj(r.interpolation)?.type === "linear") {
+    ({ hz, frames, servoOrder: order } = traj);
+    episode = obj(r.source)?.episode;
+  } else return undefined;
+  if (typeof hz !== "number" || hz <= 0 || !Array.isArray(frames) || frames.length < 2)
+    return undefined;
+  if (!Array.isArray(order)) return undefined;
+  const col = def.servos.map((s) => order.indexOf(s.id));
+  const limits = def.servos.map((s) => s.limitsDeg.map((d) => (d * Math.PI) / 180));
+  const rows = frames.map((row: unknown) =>
+    col.map((c, k) => {
+      const v = Array.isArray(row) && c >= 0 && typeof row[c] === "number" ? (row[c] as number) : 0;
+      return Math.min(limits[k][1], Math.max(limits[k][0], v));
+    })
+  );
+  return { hz, frames: rows, episode: typeof episode === "string" ? episode : undefined };
 }

@@ -97,6 +97,7 @@ The bar under the 3D view holds an animation — a named sequence of poses — f
 - The sliders and 3D drag edit the **selected** pose — pose 1 by default. **+** adds a pose that starts as a copy of the last one; hovering any pose shows a button to append a copy of it — handy for repeating moves like a wave. Drag a pose to reorder it (it keeps its own transition time); whichever pose is first is the start.
 - The field between two poses is the transition time in seconds. Joints move between poses along a sigmoid curve — slow start, slow arrival — so the servos have time to settle.
 - **Play** runs the sequence once; with **Loop** on it returns to pose 1 (the `↺` field sets that return time) and repeats. Playback only moves the model, never the real robot.
+- **Recorded episodes** — a file exported by [nexus-data](https://github.com/AMasetti/Nexus-Data) (`interpolation: linear`) plays its recorded frames exactly instead of easing between poses; a _Recorded_ badge shows it. Its poses are keyframes on the timeline. Renaming or looping keeps the recording; editing a pose's angles, timing or order turns it into a regular sequence.
 - The animation is saved in the browser per robot. **Export** downloads it as `<robot>_<name>_sequence.json` (e.g. `optimus_wave_sequence.json`); **Import** loads one back, taking its name from the file's `name` field or, if missing, from that file-name pattern.
 
 [`docs/optimus_wave_sequence.json`](docs/optimus_wave_sequence.json) is the wave above — import it on Optimus to try the timeline.

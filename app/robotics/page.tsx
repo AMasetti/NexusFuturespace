@@ -28,6 +28,7 @@ import {
   sampleAt,
   singlePoseSequence,
   totalDuration,
+  withMotionEdit,
   type Sequence,
 } from "@/lib/sequence";
 import { RosProvider, useRosTopic, useRosStatus, useRosPublish } from "@/lib/ros";
@@ -905,6 +906,9 @@ function LinkProviders({ def, children }: { def: RobotDef; children: React.React
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+/** Recorded frames × servos kept in localStorage; longer recordings keep only their keyframes. */
+const MAX_SAVED_VALUES = 150_000;
+
 export default function RoboticsPage() {
   const { defs, errors } = useRobotDefs();
   const [robotId, setRobotId] = useState<string | null>(null);
@@ -996,7 +1000,11 @@ export default function RoboticsPage() {
   // Save the sequence on change, debounced to avoid hammering localStorage on every slider tick.
   useEffect(() => {
     if (!def || !sequence || anglesFor !== def.id) return;
-    const t = setTimeout(() => saveSequenceRaw(def.id, { robot: def.id, ...sequence }), 500);
+    // A long recording would fill localStorage: keep its keyframes, drop the frames.
+    const rec = sequence.recording;
+    const keep = rec && rec.frames.length * def.servos.length <= MAX_SAVED_VALUES;
+    const saved = { robot: def.id, ...sequence, recording: keep ? rec : undefined };
+    const t = setTimeout(() => saveSequenceRaw(def.id, saved), 500);
     return () => clearTimeout(t);
   }, [sequence, def, anglesFor]);
 
@@ -1050,10 +1058,15 @@ export default function RoboticsPage() {
     setAngles(seq.poses[i].angles);
     setPlayTime(poseTimes(seq)[i]);
   };
+  // Editing a pose's angles turns a recording into a regular, editable sequence.
   const updateSelectedPose = (a: ServoAngles) =>
     setSequence((seq) =>
       seq
-        ? { ...seq, poses: seq.poses.map((p, k) => (k === selectedPose ? { ...p, angles: a } : p)) }
+        ? {
+            ...seq,
+            recording: undefined,
+            poses: seq.poses.map((p, k) => (k === selectedPose ? { ...p, angles: a } : p)),
+          }
         : seq
     );
   /** User edits (sliders, 3D drag) change the selected pose; robot updates use setAngles. */
@@ -1203,7 +1216,7 @@ export default function RoboticsPage() {
         sequence={sequence}
         selected={selectedPose}
         onSelect={(i, next) => showPose(next ?? sequence, i)}
-        onChange={setSequence}
+        onChange={(next) => setSequence((prev) => (prev ? withMotionEdit(prev, next) : next))}
         playing={playing}
         time={playing ? playTime : (poseTimes(sequence)[selectedPose] ?? 0)}
         onPlay={() => {

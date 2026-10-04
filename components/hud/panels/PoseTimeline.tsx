@@ -442,6 +442,14 @@ export function PoseTimeline({
         <span className={cn(MONO, "px-2 text-xs text-cyan-200/80")}>
           {time.toFixed(2)} / {total.toFixed(2)} s
         </span>
+        {sequence.recording && (
+          <span
+            className="rounded-full border border-rose-300/30 bg-rose-400/10 px-2.5 py-1 font-mono text-[10px] tracking-widest text-rose-100 uppercase"
+            title="Plays the recorded frames exactly. Editing a pose's angles, timing or order turns it into a regular sequence."
+          >
+            Recorded · {sequence.recording.hz} Hz
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {message && <span className="font-mono text-[10px] text-amber-200/90">{message}</span>}

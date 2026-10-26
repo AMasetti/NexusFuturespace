@@ -36,6 +36,14 @@ Without a robot everything works as a simulator: pose the model, read the power 
 | `NEXT_PUBLIC_ROBOT_HOST` | `optimus.local`        | Robot firmware WebSocket host (port from `robot.json`)       |
 | `NEXT_PUBLIC_ROS_WS_URL` | `wss://localhost:9090` | rosbridge URL — baked in at build time, rebuild after change |
 
+## AR hello world (Meta Quest 3)
+
+```bash
+npm run dev:https   # https://<your-computer-ip>:3000/robotics/ar
+```
+
+The Quest only starts AR over HTTPS. `dev:https` serves a self-signed certificate on your network; with the Quest on the same WiFi, open `https://<your-computer-ip>:3000/robotics/ar` in the Quest Browser, accept the certificate warning, and press **Enter AR**. A spinning cube appears in front of you in passthrough.
+
 ## Scripts
 
 ```bash
